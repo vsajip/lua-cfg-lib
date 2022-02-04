@@ -47,7 +47,7 @@ TestLocation = {
 
     testRepresentation = function()
         local loc = Location:new(9, 3)
-        local s = loc:tostring()
+        local s = string.format('%s', loc)
         lu.assertEquals(s, '(9, 3)')
     end,
 }
