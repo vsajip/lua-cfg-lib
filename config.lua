@@ -7,6 +7,8 @@
 -- @see https://docs.red-dove.com/cfg/
 --
 
+local charcats = require('charcats')
+
 local Location = {
     next_line = function(self)
         self.line = self.line + 1
@@ -15,6 +17,12 @@ local Location = {
 
     next_column = function(self)
         self.column = self.column + 1
+    end,
+
+    prev_column = function(self)
+        if self.column > 1 then
+            self.column = self.column - 1
+        end
     end,
 
     update = function(self, other)
@@ -44,7 +52,7 @@ local Stream = {
         local o = { path = path, file = io.open(path, 'rb') }
         o.extent = o.file:seek('end')
         o.file:seek('set')
-        o.at_end = file:seek() == o.extent
+        o.at_end = o.file:seek() == o.extent
         self.__index = self
         setmetatable(o, self)
         return o
@@ -109,7 +117,7 @@ local Stream = {
             if pos + extra > 1 + #s then
                 error({"Premature end of input", pos, extra, #s})
             end
-            c2 = s:sub(pos, pos + extra)
+            c2 = s:sub(pos, pos + extra - 1)
             self.pos = pos + extra
         end
         if self.file then
@@ -121,15 +129,14 @@ local Stream = {
     end,
 }
 
-local function enum(tbl)
-    local length = #tbl
-    for i = 1, length do
-        local v = tbl[i]
-        tbl[v] = i
-    end
-    return tbl
-end
-
+-- local function enum(tbl)
+    -- local length = #tbl
+    -- for i = 1, length do
+        -- local v = tbl[i]
+        -- tbl[v] = i
+    -- end
+    -- return tbl
+-- end
 
 -- kinds of token
 
@@ -193,10 +200,43 @@ local function make_tokentypes()
 end
 
 local TokenType = make_tokentypes()
+
 -- Add the token types to the globals so that we don't need to qualify them
 -- in this file. We remove them at the end
 for k, v in pairs(TokenType) do
     _G[k] = v
+end
+
+local Token = {
+    new = function(self, type, text, value)
+        local o = { type = type, text = text, value = value }
+        self.__index = self
+        setmetatable(o, self)
+        return o
+    end,
+
+    __tostring = function(self)
+        local result = string.format('T(%s|%s|%s)', self.type, self.text, self.value)
+        if self.start then
+            result = result .. string.format('[%s, %s]', self.start, self.finish)
+        end
+        return result
+    end
+}
+
+local function is_letter(c)
+    local cp = utf8.codepoint(c, 1, #c)
+    return charcats.L[cp]
+end
+
+local function is_digit(c)
+    local cp = utf8.codepoint(c, 1, #c)
+    return charcats.Nd[c]
+end
+
+local function is_letter_or_digit(c)
+    local cp = utf8.codepoint(c, 1, #c)
+    return charcats.L[cp] or charcats.Nd[cp]
 end
 
 local Tokenizer = {
@@ -216,8 +256,9 @@ local Tokenizer = {
 
     get_char = function(self)
         local size = #self.pushed_back
+        local result
         if size > 0 then
-            pb = table.remove(self.pushed_back, size)
+            local pb = table.remove(self.pushed_back, size)
             self.char_location = pb.cloc
             self.location = pb.loc
             result = pb.c
@@ -248,6 +289,85 @@ local Tokenizer = {
     end,
 
     get_token = function(self)
+        local type = EOF
+        local token = {}
+        local value
+        local start_loc = Location:new()
+        local end_loc = Location:new()
+        local c
+
+        while true do
+            c = self:get_char()
+            start_loc:update(self.char_location)
+            end_loc:update(self.char_location)
+
+            if not c then break end
+
+            if c == '#' then
+                local nl_seen = false
+                table.insert(token, c)
+                while true do
+                    c = self:get_char()
+                    if not c then break end
+                    if c == '\n' then
+                        nl_seen = true
+                        break
+                    end
+                    if c ~= '\r' then
+                        table.insert(token, c)
+                    else
+                        c = self:get_char()
+                        if c ~= '\n' then
+                            self:push_back(c)
+                            break
+                        end
+                        nl_seen = true
+                        break
+                    end
+                end
+                type = NEWLINE
+                if not nl_seen then
+                    self.location:next_line()
+                end
+                end_loc:update(self.location)
+                end_loc:prev_column()
+                break
+            elseif c == '\n' then
+                table.insert(token, c)
+                end_loc:update(self.location)
+                end_loc:prev_column()
+                type = NEWLINE
+                break
+            elseif c == '\r' then
+                c = self:get_char()
+                if c ~= '\n' then
+                    self:push_back(c)
+                else
+                    table.insert(token, c)
+                    end_loc:update(self.location)
+                    end_loc:prev_column()
+                    type = NEWLINE
+                    break
+                end
+            elseif is_letter(c) or (c == '_') then
+                type = WORD
+                table.insert(token, c)
+                end_loc:update(self.char_location)
+                c = self:get_char()
+                while c and is_letter_or_digit(c) do
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                    c = self:get_char()
+                end
+                self:push_back(c)
+                -- TODO keywords etc.
+                break
+            else
+                local s = string.format('Unexpected character: \'%s\'', c)
+                error(s, 2)
+            end
+        end
+        return Token:new(type, table.concat(token, ''), value)
     end,
 }
 
@@ -260,5 +380,6 @@ return {
     Location = Location,
     Stream = Stream,
     TokenType = TokenType,
+    Token = Token,
     Tokenizer = Tokenizer,
 }

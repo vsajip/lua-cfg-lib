@@ -22,7 +22,7 @@ for k, v in pairs(TokenType) do
 end
 
 TestLocation = {
-    testDefault = function()
+    test_default = function()
         local loc = Location:new()
         lu.assertEquals(loc.line, 1)
         lu.assertEquals(loc.column, 1)
@@ -31,14 +31,31 @@ TestLocation = {
         lu.assertEquals(loc.column, 4)
     end,
 
-    testNextLine = function()
+    test_next_line = function()
         local loc = Location:new(20, 3)
-        loc:next_line ()
+        loc:next_line()
         lu.assertEquals(loc.line, 21)
         lu.assertEquals(loc.column, 1)
     end,
 
-    testCopy = function()
+    test_next_column = function()
+        local loc = Location:new(20, 3)
+        loc:next_column()
+        lu.assertEquals(loc.line, 20)
+        lu.assertEquals(loc.column, 4)
+    end,
+
+    test_prev_column = function()
+        local loc = Location:new(20, 2)
+        loc:prev_column()
+        lu.assertEquals(loc.line, 20)
+        lu.assertEquals(loc.column, 1)
+        loc:prev_column()
+        lu.assertEquals(loc.line, 20)
+        lu.assertEquals(loc.column, 1)
+    end,
+
+    test_copy = function()
         local loc1 = Location:new(17, 15)
         local loc2 = loc1:copy()
         lu.assertEquals(loc1, loc2)
@@ -46,7 +63,7 @@ TestLocation = {
         lu.assertNotEquals(loc1, loc2)
     end,
 
-    testUpdate = function()
+    test_update = function()
         local loc1 = Location:new(17, 15)
         local loc2 = Location:new()
         lu.assertNotEquals(loc1, loc2)
@@ -54,7 +71,7 @@ TestLocation = {
         lu.assertEquals(loc1, loc2)
     end,
 
-    testRepresentation = function()
+    test_representation = function()
         local loc = Location:new(9, 3)
         local s = string.format('%s', loc)
         lu.assertEquals(s, '(9, 3)')
@@ -107,8 +124,21 @@ local function make_stream(s)
     return Stream:from_string(s)
 end
 
+local function make_tokenizer(s)
+    local stream = make_stream(s)
+    return Tokenizer:new(stream)
+end
+
+local function trim(s)
+    return string.gsub(s, '^%s*(.-)%s*$', '%1')
+end
+
+local function printf(...)
+    print(string.format(...))
+end
+
 TestStream = {
-    testString = function()
+    test_string = function()
 
         local function collect_chars(stream)
             local chars = {}
@@ -144,12 +174,56 @@ TestStream = {
 }
 
 TestTokenizer = {
-    testEmpty = function()
-        local stream = make_stream('')
-        local tokenizer = Tokenizer:new(stream)
+    test_empty = function()
+        local tokenizer = make_tokenizer('')
         lu.assertTrue(tokenizer.at_end)
         local c = tokenizer:get_char()
         lu.assertIsNil(c)
+        local t = tokenizer:get_token()
+        lu.assertEquals(t.type, EOF)
+        lu.assertEquals(t.text, '')
+        lu.assertIsNil(t.value)
+    end,
+
+    test_comments = function()
+        local cases = {
+            '# a comment\n',
+            '# another comment',
+            '# yet another comment\r'
+        }
+        for _, c in ipairs(cases) do
+            local tokenizer = make_tokenizer(c)
+            local t = tokenizer:get_token()
+            lu.assertEquals(t.type, NEWLINE)
+            lu.assertEquals(t.text, trim(c))
+            t = tokenizer:get_token()
+            lu.assertEquals(t.type, EOF)
+        end
+    end,
+
+    test_identifiers = function()
+        local cases = {
+            'foo',
+            '\xe0\xa4\xb5\xe0\xa4\xae\xe0\xa4\xb8',
+            '\xc3\xa9',
+            '\xc3\x88',
+            '\xec\x95\x88\xeb\x85\x95\xed\x95\x98\xec\x84\xb8\xec\x9a\x94',
+            '\xe3\x81\x95\xe3\x82\x88\xe3\x81\xaa\xe3\x82\x89',
+            '\xe3\x81\x82\xe3\x82\x8a\xe3\x81\x8c\xe3\x81\xa8\xe3\x81\x86',
+            '\xd0\xa5\xd0\xbe\xd1\x80\xd0\xbe\xd1\x88\xd0\xbe',
+            '\xd1\x81\xd0\xbf\xd0\xb0\xd1\x81\xd0\xb8\xd0\xb1\xd0\xbe',
+            '\xe7\x8e\xb0\xe4\xbb\xa3\xe6\xb1\x89\xe8\xaf\xad\xe5\xb8\xb8\xe7\x94\xa8\xe5\xad\x97\xe8\xa1\xa8',
+        }
+
+        for i, c in ipairs(cases) do
+            local tokenizer = make_tokenizer(c)
+            local t = tokenizer:get_token()
+            -- printf('%d: %s', i, t.text)
+            lu.assertEquals(t.type, WORD)
+            lu.assertEquals(t.text, c)
+            t = tokenizer:get_token()
+            lu.assertEquals(t.type, EOF)
+        end
     end,
 }
 

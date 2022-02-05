@@ -1,24 +1,25 @@
-package = "lua-cfg-lib"
-version = "0.0.1"
+package = 'lua-cfg-lib'
+version = '0.0.1'
 source = {
-    url = "..." -- We don't have one yet
+    url = '...' -- We don't have one yet
 }
 description = {
-    summary = "A library for working with the CFG configuration format.",
+    summary = 'A library for working with the CFG configuration format.',
     detailed = [[
         A library for working with the CFG configuration format.
     ]],
-    homepage = "https://docs.red-dove.com/cfg/index.html",
-    license = "BSD-3-Clause"
+    homepage = 'https://docs.red-dove.com/cfg/index.html',
+    license = 'BSD-3-Clause'
 }
 dependencies = {
-    "lua >= 5.3"
+    'lua >= 5.3'
 }
 build = {
-    type = "none",
+    type = 'none',
     install = {
         lua = {
-            config = "config.lua"
+            config = 'config.lua',
+            charcats = 'charcats.lua',
         }
     }
 }
