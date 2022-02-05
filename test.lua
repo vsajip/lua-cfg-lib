@@ -11,6 +11,7 @@ local lu = require('luaunit')
 local config = require('config')
 
 local Location = config.Location
+local Stream = config.Stream
 
 TestLocation = {
     testDefault = function()
@@ -50,6 +51,87 @@ TestLocation = {
         local s = string.format('%s', loc)
         lu.assertEquals(s, '(9, 3)')
     end,
+}
+
+local function map(seq, f)
+    local result = {}
+    for i, v in pairs(seq) do
+        result[i] = f(v)
+    end
+    return result
+end
+
+local function filter(seq, pred)
+    local result = {}
+    for i, v in ipairs(seq) do
+        if pred(v) then
+            table.insert(result, v)
+       end
+    end
+    return result
+end
+
+local function partition(seq, pred)
+    local left = {}
+    local right = {}
+    for i, v in ipairs(seq) do
+        if pred(v) then
+            table.insert(left, v)
+        else
+            table.insert(right, v)
+        end
+    end
+    return left, right
+end
+
+local function reduce(seq, op, initval)
+    local result = initval
+
+    if #seq ~= 0 then
+        for i = 1, #seq do
+            result = op(result, seq[i])
+        end
+    end
+    return result
+end
+
+TestStream = {
+    testString = function()
+        local function make_stream(s)
+            return Stream:from_string(s)
+        end
+
+        local function collect_chars(stream)
+            local chars = {}
+            local i = 0
+            repeat
+                local pos = stream.pos
+                local c = stream:get_char()
+                if c then
+                    i = i + 1
+                    chars[i] = c
+                end
+            until c == nil
+            return chars
+        end
+
+        local function chars_to_string(chars)
+            local codepoints = map(chars, utf8.codepoint)
+            return utf8.char(table.unpack(codepoints))
+        end
+
+        local stream = make_stream('Grüß Gott')
+        local chars = collect_chars(stream)
+        lu.assertEquals(#chars, 9)
+        local actual = chars_to_string(chars)
+        lu.assertEquals(actual, stream.source)
+        stream = make_stream('\xd0\x9f\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82 \xd0\xbc\xd0\xb8\xd1\x80') -- Привет мир
+        actual = chars_to_string(collect_chars(stream))
+        lu.assertEquals(actual, stream.source)
+        stream = make_stream('\xe4\xbd\xa0\xe5\xa5\xbd\xef\xbc\x8c\xe4\xb8\x96\xe7\x95\x8c') -- 你好，世界
+        actual = chars_to_string(collect_chars(stream))
+        lu.assertEquals(actual, stream.source)
+    end
 }
 
 os.exit(lu.LuaUnit.run())

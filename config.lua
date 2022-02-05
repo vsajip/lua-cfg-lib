@@ -53,43 +53,61 @@ Stream = {
     get_byte = function(self)
         local result
         if self.file then
-            result = self.file:read(1) or ''
+            result = self.file:read(1)
         else
             local pos = self.pos
-            result = self.source:sub(pos, pos)
-            self.pos = pos + 1
+            if pos > #self.source then
+                result = nil
+            else
+                result = self.source:sub(pos, pos)
+                self.pos = pos + 1
+            end
         end
-        self.at_end = result == ''
+        self.at_end = result == nil
         return result
     end,
 
     get_char = function(self)
         local c1 = self:get_byte()
-        if c1 == '' then
-            return c1
+        if c1 == nil then
+            return nil
         end
-        local ctr, c = -1, math.max(c1:byte(), 128)
-        repeat
-          ctr = ctr + 1
-          c = (c - 128)*2
-        until c < 128
-        if ctr < 1 then
+        local c = c1:byte()
+        local extra
+        if c < 128 then
+            extra = 0
+        elseif c & 0xF0 == 0xF0 then
+            extra = 3
+        elseif c & 0xE0 == 0xE0 then
+            extra = 2
+        elseif c & 0xC0 == 0xC0 then
+            extra = 1
+        else
+            local s = string.format('Invalid UTF-8 byte 0x%x at position %d', c, self.pos - 1)
+            error(s, 2)
+        end
+        -- print(string.format('extra: %d', extra))
+        if extra == 0 then
             return c1
         end
         local c2
         if self.file then
-            c2 = self.file:read(ctr)
-            -- TODO check c2 ~= nil, #c2 == ctr
+            c2 = self.file:read(extra)
+            if c2 == nil or #c2 < extra then
+                error("Premature end of input")
+            end
         else
-            -- TODO check self.pos + ctr <= #s
+            local s = self.source
             local pos = self.pos
-            c2 = self.source:sub(pos, pos + ctr)
-            self.pos = pos + ctr
+            if pos + extra > 1 + #s then
+                error({"Premature end of input", pos, extra, #s})
+            end
+            c2 = s:sub(pos, pos + extra)
+            self.pos = pos + extra
         end
         return c1..c2
     end,
 }
-
 
 return {
     Location = Location,

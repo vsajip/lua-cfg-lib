@@ -18,7 +18,7 @@ build = {
     type = "none",
     install = {
         lua = {
-            cfg = "cfg.lua"
+            config = "config.lua"
         }
     }
 }
