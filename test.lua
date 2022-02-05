@@ -12,6 +12,14 @@ local config = require('config')
 
 local Location = config.Location
 local Stream = config.Stream
+local TokenType = config.TokenType
+local Tokenizer = config.Tokenizer
+
+-- Add the token types to the globals so that we don't need to qualify them
+-- in this file. We remove them at the end
+for k, v in pairs(TokenType) do
+    _G[k] = v
+end
 
 TestLocation = {
     testDefault = function()
@@ -95,11 +103,12 @@ local function reduce(seq, op, initval)
     return result
 end
 
+local function make_stream(s)
+    return Stream:from_string(s)
+end
+
 TestStream = {
     testString = function()
-        local function make_stream(s)
-            return Stream:from_string(s)
-        end
 
         local function collect_chars(stream)
             local chars = {}
@@ -134,4 +143,20 @@ TestStream = {
     end
 }
 
-os.exit(lu.LuaUnit.run())
+TestTokenizer = {
+    testEmpty = function()
+        local stream = make_stream('')
+        local tokenizer = Tokenizer:new(stream)
+        lu.assertTrue(tokenizer.at_end)
+        local c = tokenizer:get_char()
+        lu.assertIsNil(c)
+    end,
+}
+
+local result = lu.LuaUnit.run()
+-- Remove the added token types. Not strictly necessary as we just exit
+for k, v in pairs(TokenType) do
+    _G[k] = nil
+end
+
+os.exit(result)
