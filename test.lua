@@ -120,6 +120,12 @@ local function reduce(seq, op, initval)
     return result
 end
 
+local function attrgetter(attrname)
+    return function(o)
+        return o[attrname]
+    end
+end
+
 local function make_stream(s)
     return Stream:from_string(s)
 end
@@ -237,6 +243,30 @@ TestTokenizer = {
             t = tokenizer:get_token()
             lu.assertEquals(t.type, EOF)
         end
+    end,
+
+    test_keywords = function()
+        local keywords = 'true false null is in not and or'
+        local tokenizer = make_tokenizer(keywords)
+        local tokens = {}
+        while true do
+            local t = tokenizer:get_token()
+            if t.type == EOF then
+                break
+            else
+                table.insert(tokens, t)
+            end
+        end
+        local types = {TRUE, FALSE, NONE, IS, IN, NOT, AND, OR}
+        local texts = {'true', 'false', 'null', 'is', 'in',
+                       'not', 'and', 'or' }
+        local values = {true, false, nil, nil, nil, nil, nil, nil}
+        local actuals = map(tokens, attrgetter('type'))
+        lu.assertEquals(actuals, types)
+        actuals = map(tokens, attrgetter('text'))
+        lu.assertEquals(actuals, texts)
+        actuals = map(tokens, attrgetter('value'))
+        lu.assertEquals(actuals, values)
     end,
 
     test_string_literals = function()
