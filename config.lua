@@ -239,6 +239,122 @@ local function is_letter_or_digit(c)
     return charcats.L[cp] or charcats.Nd[cp]
 end
 
+local function is_whitespace(c)
+    return c:match('%s')
+end
+
+local function copy_array(t)
+    local result = {}
+    for i, v in ipairs(t) do
+        table.insert(result, v)
+    end
+    return result
+end
+
+local PUNCTUATION = {
+    [':'] = COLON,
+    ['-'] = MINUS,
+    ['+'] = PLUS,
+    ['*'] = STAR,
+    ['/'] = SLASH,
+    ['%'] = MODULO,
+    [','] = COMMA,
+    ['{'] = LCURLY,
+    ['}'] = RCURLY,
+    ['['] = LBRACK,
+    [']'] = RBRACK,
+    ['('] = LPAREN,
+    [')'] = RPAREN,
+    ['@'] = AT,
+    ['$'] = DOLLAR,
+    ['<'] = LT,
+    ['>'] = GT,
+    ['!'] = NOT,
+    ['~'] = TILDE,
+    ['&'] = BITAND,
+    ['|'] = BITOR,
+    ['^'] = BITXOR,
+    ['.'] = DOT,
+    ['='] = ASSIGN
+}
+
+local KEYWORDS = {
+    ['true'] = TRUE,
+    ['false'] = FALSE,
+    ['null'] = NONE,
+    ['is'] = IS,
+    ['in'] = IN,
+    ['not'] = NOT,
+    ['and'] = AND,
+    ['or'] = OR
+}
+
+  local KEYWORD_VALUES = {
+    ['true'] = true,
+    ['false'] = false,
+    ['nil'] = {}  -- can't use nil
+}
+
+local ESCAPES = {
+    ['a'] = '\x07',
+    ['b'] = '\b',
+    ['f'] = '\x0C',
+    ['n'] = '\n',
+    ['r'] = '\r',
+    ['t'] = '\t',
+    ['v'] = '\x0B',
+    ['\\'] = '\\',
+    ['\''] = '\'',
+    ['"'] = '"' 
+}
+
+local function parse_escapes(s)
+    local i = s:find('\\', 1, true)
+    if not i then
+        return s
+    end
+    local sb = {}
+    local failed = false
+    while i do
+        local n = #s
+        if i > 1 then
+            table.insert(sb, s:sub(1, i - 1))
+        end
+        local c = s:sub(i + 1, i + 1)
+        if ESCAPES[c] then
+            table.insert(sb, ESCAPES[c])
+            i = i + 2
+        elseif c == 'x' or c == 'X' or c == 'u' or c == 'U' then
+            local slen
+            if c == 'x' or c == 'X' then
+                slen = 4
+            elseif c == 'u' then
+                slen = 6
+            else
+                slen = 10
+            end
+            if i + slen > n + 1 then
+                failed = true
+                break
+            end
+            local p = s:sub(i + 2, i + slen - 1)
+            local cp = tonumber(p, 16)
+            table.insert(sb, utf8.char(cp))
+            i = i + slen
+        else
+            failed = true
+            break
+        end
+        s = s:sub(i)
+        i = s:find('\\', 1, true)
+    end
+    if failed then
+        s = string.format('Invalid escape sequence at position %d', i)
+        error(s, 2)
+    end
+    return table.concat(sb, '') .. s
+end
+
 local Tokenizer = {
     new = function(self, stream)
         assert(stream, 'A stream must be specified')
@@ -291,10 +407,23 @@ local Tokenizer = {
     get_token = function(self)
         local type = EOF
         local token = {}
+        local text
         local value
+        local quoter
         local start_loc = Location:new()
         local end_loc = Location:new()
         local c
+
+        local function check_terminator()
+            -- only called for multi-line, so quoter is 3 long
+            local n = #token
+            assert(n >= 6, 'token should be at least 6 long')
+            if token[n - 2] ~= quoter[1] then return false end
+            if token[n - 1] ~= quoter[2] then return false end
+            if token[n] ~= quoter[3] then return false end
+            if token[n - 3] == '\\' then return false end
+            return true
+        end
 
         while true do
             c = self:get_char()
@@ -303,7 +432,9 @@ local Tokenizer = {
 
             if not c then break end
 
-            if c == '#' then
+            if is_whitespace(c) then
+                goto continue
+            elseif c == '#' then
                 local nl_seen = false
                 table.insert(token, c)
                 while true do
@@ -349,6 +480,16 @@ local Tokenizer = {
                     type = NEWLINE
                     break
                 end
+            elseif c == '\\' then
+                c = self:get_char()
+                if c == '\r' then
+                    c = self:get_char()
+                end
+                if c ~= '\n' then
+                    local s = string.format('Unexpected character: \'\\\'', c)
+                    error(s, 2)
+                end
+                end_loc:update(self.char_location)
             elseif is_letter(c) or (c == '_') then
                 type = WORD
                 table.insert(token, c)
@@ -360,14 +501,92 @@ local Tokenizer = {
                     c = self:get_char()
                 end
                 self:push_back(c)
-                -- TODO keywords etc.
+                text = table.concat(token, '')
+                if KEYWORDS[text] then
+                    type = KEYWORDS[text]
+                    value = KEYWORD_VALUES[text]
+                    if value == {} then
+                        value = nil
+                    end
+                end
+                break
+            elseif c == '`' then
+                type = BACKTICK
+                table.insert(token, c)
+                end_loc:update(self.char_location)
+                while true do
+                    c = self:get_char()
+                    if not c then break end
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                    if c == '`' then break end
+                end
+                if not c then
+                    text = table.concat(token, '')
+                    local s = string.format('Unterminated `-string: %s', text)
+                    error(s, 2)
+                end
+                end_loc:update(self.char_location)
+                value = parse_escapes(text:sub(2, -2))
+                break
+            elseif c == '\'' or c == '"' then
+                local quote = c
+                local multi_line = false
+                local escaped = false
+                local n
+                type = STRING
+                table.insert(token, c)
+                local c1 = self:get_char()
+                local c1_loc = self.char_location:copy()
+                if c1 ~= quote then
+                    self:push_back(c1)
+                else
+                    local c2 = self:get_char()
+                    if c2 ~= quote then
+                        self:push_back(c2)
+                        self.char_location:update(c1_loc)
+                        self:push_back(c1)
+                    else
+                        multi_line = true
+                        table.insert(token, quote)
+                        table.insert(token, quote)
+                    end
+                end
+                quoter = copy_array(token)
+                local qlen = #quoter
+                while true do
+                    c = self:get_char()
+                    if not c then break end
+                    table.insert(token, c)
+                    if c == quote and not escaped then
+                        n = #token
+                        if not multi_line or n >= 6 and check_terminator() then
+                            break
+                        end
+                    end
+                    if c ~= '\\' then
+                        escaped = false
+                    else
+                        escaped = not escaped
+                    end
+                end
+                text = table.concat(token, '')
+                if not c then
+                    local s = string.format('Unterminated quoted string: %s', text)
+                    error(s, 2)
+                end
+                value = parse_escapes(text:sub(qlen + 1, -(qlen + 1)))
                 break
             else
                 local s = string.format('Unexpected character: \'%s\'', c)
                 error(s, 2)
             end
+        ::continue::
         end
-        return Token:new(type, table.concat(token, ''), value)
+        if text == nil then
+            text = table.concat(token, '')
+        end
+        return Token:new(type, text, value)
     end,
 }
 

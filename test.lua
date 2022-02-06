@@ -26,7 +26,7 @@ TestLocation = {
         local loc = Location:new()
         lu.assertEquals(loc.line, 1)
         lu.assertEquals(loc.column, 1)
-        local loc = Location:new(7, 4)
+        loc = Location:new(7, 4)
         lu.assertEquals(loc.line, 7)
         lu.assertEquals(loc.column, 4)
     end,
@@ -224,6 +224,81 @@ TestTokenizer = {
             t = tokenizer:get_token()
             lu.assertEquals(t.type, EOF)
         end
+    end,
+
+    test_string_literals = function()
+        local cases = {
+            {"'foo'", 'foo'},
+            {'"bar"', 'bar'},
+            {'"""abc\ndef\n"""', 'abc\ndef\n'},
+            {'"\\n"', '\n'},
+        }
+
+        for _, c in ipairs(cases) do
+            local s, v = table.unpack(c)
+            local tokenizer = make_tokenizer(s)
+            local t = tokenizer:get_token()
+            lu.assertEquals(t.type, STRING)
+            lu.assertEquals(t.text, s)
+            lu.assertEquals(t.value, v)
+            t = tokenizer:get_token()
+            lu.assertEquals(t.type, EOF)
+        end
+    end,
+
+    test_empty_string_literals = function()
+        local cases = {
+            {"''", 1, 2},
+            {'""', 1, 2},
+            {"''''''", 1, 6},
+            {'""""""', 1, 6}
+        }
+        for _, c in ipairs(cases) do
+            local s, sp, ep = table.unpack(c)
+            local tokenizer = make_tokenizer(s)
+            local t = tokenizer:get_token()
+            lu.assertEquals(t.type, STRING)
+            lu.assertEquals(t.text, s)
+            lu.assertEquals(t.value, '')
+            -- TODO check locations
+            t = tokenizer:get_token()
+            lu.assertEquals(t.type, EOF)
+        end
+    end,
+
+    test_escapes = function()
+        local cases = {
+            { "'\\a'", '\a' },
+            { "'\\b'", '\b' },
+            { "'\\f'", '\f' },
+            { "'\\n'", '\n' },
+            { "'\\r'", '\r' },
+            { "'\\t'", '\t' },
+            { "'\\v'", '\v' },
+            { "'\\\\'", '\\' },
+            { "'\\''", "'" },
+            { "'\\\"'", '\"' },
+            { "'\\xAB'", '\xc2\xab' },
+            { "'\\u2803'", '\xe2\xa0\x83' },
+            { "'\\u28A0abc\\u28A0'", '\xe2\xa2\xa0abc\xe2\xa2\xa0' },
+            { "'\\u28A0abc'", '\xe2\xa2\xa0abc' },
+            { "'\\uE000'", '\xee\x80\x80' },
+            { "'\\U0010ffff'", '\xf4\x8f\xbf\xbf' }
+        }
+
+        for i, c in ipairs(cases) do
+            local s, v = table.unpack(c)
+            local tokenizer = make_tokenizer(s)
+            local t = tokenizer:get_token()
+
+            -- printf('%d: %s', i, s)
+            lu.assertEquals(t.type, STRING)
+            lu.assertEquals(t.text, s)
+            lu.assertEquals(t.value, v)
+        end
+    end,
+
+    test_bad_strings = function()
     end,
 }
 
