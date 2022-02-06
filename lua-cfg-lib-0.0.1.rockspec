@@ -20,6 +20,7 @@ build = {
         lua = {
             config = 'config.lua',
             charcats = 'charcats.lua',
+            complex = 'complex.lua',
         }
     }
 }
