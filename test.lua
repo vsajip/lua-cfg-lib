@@ -137,6 +137,19 @@ local function printf(...)
     print(string.format(...))
 end
 
+local function compare_arrays(a1, a2)
+    if #a1 ~= #a2 then
+      return false
+    end
+
+    for i, v in ipairs(a1) do
+      if v ~= a2[i] then
+        return false
+      end
+    end
+    return true
+  end
+
 TestStream = {
     test_string = function()
 
@@ -298,7 +311,51 @@ TestTokenizer = {
         end
     end,
 
+    test_bad_escapes = function()
+        local cases = {
+            "'\\z'",
+            "'\\x'",
+            "'\\xa'",
+            "'\\xaz'",
+            "'\\u'",
+            "'\\u0'",
+            "'\\u01'",
+            "'\\u012'",
+            "'\\u012z'",
+            "'\\u012zA'",
+            "'\\U00110000'"
+        }
+
+        for i, s in ipairs(cases) do
+            local tokenizer = make_tokenizer(s)
+
+            local ok, msg = pcall(function()
+                tokenizer:get_token()
+            end)
+            lu.assertFalse(ok)
+            lu.assertTrue(string.find(msg, 'Invalid escape sequence ', 1, true) ~= nil)
+        end
+    end,
+
     test_bad_strings = function()
+        local cases = {
+            {"\'", "Unterminated quoted string:", 1, 1},
+            {"\"", "Unterminated quoted string:", 1, 1},
+            {"\'\'\'", "Unterminated quoted string:", 1, 1},
+            {"  ;", "Unexpected character: ", 1, 3},
+            {"\"abc", "Unterminated quoted string: ", 1, 1},
+            {"\"abc\\\ndef", "Unterminated quoted string: ", 1, 1}
+        }
+
+        for i, c in ipairs(cases) do
+            local s, emsg, sl, sc = table.unpack(c)
+            local tokenizer = make_tokenizer(s)
+            local ok, msg = pcall(function ()
+                tokenizer:get_token()
+            end)
+            lu.assertFalse(ok)
+            lu.assertTrue(string.find(msg, emsg, 1, true) ~= nil)
+        end
     end,
 }
 

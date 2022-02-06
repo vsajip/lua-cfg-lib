@@ -339,7 +339,17 @@ local function parse_escapes(s)
             end
             local p = s:sub(i + 2, i + slen - 1)
             local cp = tonumber(p, 16)
-            table.insert(sb, utf8.char(cp))
+            if cp == nil then
+                local msg = string.format('Invalid escape sequence at position %d', i)
+                error(msg, 2)
+            end
+            local ok, msg = pcall(function ()
+                table.insert(sb, utf8.char(cp))
+            end)
+            if not ok then
+                local msg = string.format('Invalid escape sequence at position %d', i)
+                error(msg, 2)
+            end
             i = i + slen
         else
             failed = true
