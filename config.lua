@@ -21,7 +21,7 @@ local Location = {
     end,
 
     prev_column = function(self)
-        if self.column > 1 then
+        if self.column > 0 then
             self.column = self.column - 1
         end
     end,
@@ -149,7 +149,7 @@ local function make_tokentypes()
         FLOAT = '1'
         COMPLEX = 'j'
         STRING = '"'
-        NEWLINE = '\n'
+        NEWLINE = '\\n'
         LCURLY = '{'
         RCURLY = '}'
         LBRACK = '['
@@ -208,6 +208,16 @@ for k, v in pairs(TokenType) do
     _G[k] = v
 end
 
+local function str_repr(s)
+    return s:gsub('[\x00-\x7F]', function(c)
+        if c == '\n' then
+            return '\\n'
+        else
+            return c
+        end
+    end)
+end
+
 local Token = {
     new = function(self, type, text, value)
         local o = { type = type, text = text, value = value }
@@ -217,12 +227,18 @@ local Token = {
     end,
 
     __tostring = function(self)
-        local result = string.format('T(%s|%s|%s)', self.type, self.text, self.value)
-        if self.start then
-            result = result .. string.format('[%s, %s]', self.start, self.finish)
+        local v
+        if type(self.value) == 'string' then
+            v = str_repr(self.value)
+        else
+            v = self.value
+        end
+        local result = string.format('T(%s|%s|%s)', self.type, str_repr(self.text), v)
+        if self.spos then
+            result = result .. string.format('[%s, %s]', self.spos, self.epos)
         end
         return result
-    end
+    end,
 }
 
 local function is_letter(c)
@@ -561,9 +577,7 @@ local Tokenizer = {
 
             if not c then break end
 
-            if is_whitespace(c) then
-                goto continue
-            elseif c == '#' then
+            if c == '#' then
                 local nl_seen = false
                 table.insert(token, c)
                 while true do
@@ -609,6 +623,8 @@ local Tokenizer = {
                     type = NEWLINE
                     break
                 end
+            elseif is_whitespace(c) then
+                goto continue
             elseif c == '\\' then
                 c = self:get_char()
                 if c == '\r' then
@@ -624,7 +640,7 @@ local Tokenizer = {
                 table.insert(token, c)
                 end_loc:update(self.char_location)
                 c = self:get_char()
-                while c and is_letter_or_digit(c) do
+                while c and ((c == '_') or is_letter_or_digit(c)) do
                     table.insert(token, c)
                     end_loc:update(self.char_location)
                     c = self:get_char()
@@ -647,7 +663,7 @@ local Tokenizer = {
                     c = self:get_char()
                     if not c then break end
                     table.insert(token, c)
-                    end_loc:update(self.char_location)
+                    -- end_loc:update(self.char_location)
                     if c == '`' then break end
                 end
                 if not c then
@@ -699,6 +715,7 @@ local Tokenizer = {
                         escaped = not escaped
                     end
                 end
+                end_loc:update(self.char_location)
                 text = table.concat(token, '')
                 if not c then
                     local s = string.format('Unterminated quoted string: %s', text)
@@ -825,7 +842,10 @@ local Tokenizer = {
         if text == nil then
             text = table.concat(token, '')
         end
-        return Token:new(type, text, value)
+        local result = Token:new(type, text, value)
+        result.spos = start_loc
+        result.epos = end_loc
+        return result
     end,
 }
 

@@ -54,13 +54,16 @@ TestLocation = {
         lu.assertEquals(loc.column, 1)
         loc:prev_column()
         lu.assertEquals(loc.line, 20)
-        lu.assertEquals(loc.column, 1)
+        lu.assertEquals(loc.column, 0)
+        loc:prev_column()
+        lu.assertEquals(loc.line, 20)
+        lu.assertEquals(loc.column, 0)
     end,
 
     test_copy = function()
         local loc1 = Location:new(17, 15)
         local loc2 = loc1:copy()
-        lu.assertEquals(loc1, loc2)
+        lu.assertEquals(loc2, loc1)
         loc2:next_line()
         lu.assertNotEquals(loc1, loc2)
     end,
@@ -76,7 +79,7 @@ TestLocation = {
     test_representation = function()
         local loc = Location:new(9, 3)
         local s = string.format('%s', loc)
-        lu.assertEquals(s, '(9, 3)')
+        lu.assertEquals('(9, 3)', s)
     end,
 }
 
@@ -171,7 +174,7 @@ local function make_token(t, s, v, sl, sc, el, ec)
     local result = Token:new(t, s, v)
 
     if sl then
-        result.spos = Location:mew(sl, sc)
+        result.spos = Location:new(sl, sc)
     end
     if el then
         result.epos = Location:new(el, ec)
@@ -180,21 +183,21 @@ local function make_token(t, s, v, sl, sc, el, ec)
 end
 
 local function W(s, sl, sc)
-    local ec = sc + #s - 1
+    local ec = sc + utf8.len(s) - 1
     return make_token(WORD, s, nil, sl, sc, sl, ec)
 end
 
-local function T(t, s, v, sl, sc)
-    local el, ec
-
-    if t == NEWLINE then
-        el = sl + 1
-        ec = 0
-    else
-        el = sc
-        ec = sc + #s - 1
+local function T(t, s, v, sl, sc, el, ec)
+    if sl then
+        if t == NEWLINE then
+            el = sl + 1
+            ec = 0
+        else
+            el = sl
+            ec = sc + utf8.len(s) - 1
+        end
     end
-    return make_token(t, s, v, sl, sc, el, sc)
+    return make_token(t, s, v, sl, sc, el, ec)
 end
 
 local function load_data(path)
@@ -547,13 +550,36 @@ TestTokenizer = {
         local p = data_file_path('testdata.txt')
         local cases, keys = load_data(p)
         local expected = {
-
+            C16 = {
+                W('test', 1, 1),
+                T(COLON, ':', nil, 1, 6),
+                T(FALSE, 'false', false, 1, 8),
+                T(NEWLINE, '\n', nil, 1, 13),
+                W('another_test', 2, 1),
+                T(COLON, ':', nil, 2, 13),
+                T(TRUE, 'true', true, 2, 15),
+            },
+            C17 = {
+                W('test', 1, 1),
+                T(COLON, ':', nil, 1, 6),
+                T(NONE, 'null', nil, 1, 8),
+            },
+            C25 = {
+                W('unicode', 1, 1),
+                T(ASSIGN, '=', nil, 1, 9),
+                T(STRING, "'Gr\xc3\xbc\xc3\x9f Gott'", 'Gr\xc3\xbc\xc3\x9f Gott', 1, 11),
+                T(NEWLINE, '\n', nil, 1, 22),
+                W('more_unicode', 2, 1),
+                T(COLON, ':', nil, 2, 13),
+                T(STRING, "'\xc3\x98resund'", '\xc3\x98resund', 2, 15)
+            }
         }
         table.sort(keys)
         for _, k in ipairs(keys) do
             if expected[k] then
                 local tokenizer = make_tokenizer(cases[k])
                 local tokens = collect_tokens(tokenizer)
+                lu.assertEquals(tokens, expected[k])
             end
         end
     end,
