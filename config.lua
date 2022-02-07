@@ -711,6 +711,111 @@ local Tokenizer = {
                 end_loc:update(self.char_location)
                 type, value = self:get_number(token, start_loc, end_loc)
                 break
+            elseif PUNCTUATION[c] then
+                type = PUNCTUATION[c]
+                table.insert(token, c)
+                end_loc:update(self.char_location)
+                if c =='.' then
+                    c = self:get_char()
+                    if not is_digit(c) then
+                        self:push_back(c)
+                    else
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                        type, value = self:get_number(token, start_loc, end_loc)
+                    end
+                elseif c == '=' then
+                    c = self:get_char()
+                    if c ~= '=' then
+                        self:push_back(c)
+                    else
+                        type = EQ
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                    end
+                elseif c == '-' then
+                    c = self:get_char()
+                    if c ~= '.' and not is_digit(c) then
+                        self:push_back(c)
+                    else
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                        type, value = self:get_number(token, start_loc, end_loc)
+                    end
+                elseif c == '<' then
+                    local update = true
+                    c = self:get_char()
+                    if c == '=' then
+                        type = LE
+                    elseif c == '>' then
+                        type = ALT_NEQ
+                    elseif c == '<' then
+                        type = LSHIFT
+                    else
+                        update = false
+                        self:push_back(c)
+                    end
+                    if update then
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                    end
+                elseif c == '>' then
+                    local update = true
+                    c = self:get_char()
+                    if c == '=' then
+                        type = GE
+                    elseif c == '>' then
+                        type = RSHIFT
+                    else
+                        update = false
+                        self:push_back(c)
+                    end
+                    if update then
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                    end
+                elseif c == '!' then
+                    c = self:get_char()
+                    if c ~= '=' then
+                        self:push_back(c)
+                    else
+                        type = NEQ
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                    end
+                elseif c == '/' then
+                    c = self:get_char()
+                    if c ~= '/' then
+                        self:push_back(c)
+                    else
+                        type = SLASHSLASH
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                    end
+                elseif c == '*' then
+                    c = self:get_char()
+                    if c ~= '*' then
+                        self:push_back(c)
+                    else
+                        type = POWER
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                    end
+                elseif c == '&' or c == '|' then
+                    local c2 = self:get_char()
+                    if c2 ~= c then
+                        self:push_back(c2)
+                    else
+                        if c2 == '&' then
+                            type = AND
+                        else
+                            type = OR
+                        end
+                        table.insert(token, c)
+                        end_loc:update(self.char_location)
+                    end
+                end
+                break
             else
                 local s = string.format('Unexpected character: \'%s\'', c)
                 error(s, 2)

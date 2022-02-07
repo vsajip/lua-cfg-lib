@@ -97,6 +97,15 @@ local function filter(seq, pred)
     return result
 end
 
+local function any(seq, pred)
+    for i, v in ipairs(seq) do
+        if pred(v) then
+            return true
+       end
+    end
+    return false
+end
+
 local function partition(seq, pred)
     local left = {}
     local right = {}
@@ -193,6 +202,26 @@ TestStream = {
     end
 }
 
+local function collect_tokens(tokenizer)
+    local result = {}
+    while true do
+        local t = tokenizer:get_token()
+        if t.type == EOF then
+            break
+        else
+            table.insert(result, t)
+        end
+    end
+    return result
+end
+
+local function split(s, sep)
+    local result = {}
+    local pattern = string.format('([^%s]+)', sep or ' ')
+    s:gsub(pattern, function(c) table.insert(result, c) end)
+    return result
+end
+
 TestTokenizer = {
     test_empty = function()
         local tokenizer = make_tokenizer('')
@@ -249,15 +278,7 @@ TestTokenizer = {
     test_keywords = function()
         local keywords = 'true false null is in not and or'
         local tokenizer = make_tokenizer(keywords)
-        local tokens = {}
-        while true do
-            local t = tokenizer:get_token()
-            if t.type == EOF then
-                break
-            else
-                table.insert(tokens, t)
-            end
-        end
+        local tokens = collect_tokens(tokenizer)
         local types = {TRUE, FALSE, NONE, IS, IN, NOT, AND, OR}
         local texts = {'true', 'false', 'null', 'is', 'in',
                        'not', 'and', 'or' }
@@ -383,7 +404,7 @@ TestTokenizer = {
         end
     end,
 
-    ztest_bad_escapes = function()
+    test_bad_escapes = function()
         local cases = {
             "'\\z'",
             "'\\x'",
@@ -409,7 +430,7 @@ TestTokenizer = {
         end
     end,
 
-    ztest_bad_strings = function()
+    test_bad_strings = function()
         local cases = {
             {"\'", "Unterminated quoted string:", 1, 1},
             {"\"", "Unterminated quoted string:", 1, 1},
@@ -428,6 +449,31 @@ TestTokenizer = {
             lu.assertFalse(ok)
             lu.assertTrue(string.find(msg, emsg, 1, true) ~= nil)
         end
+    end,
+
+    test_punctuation = function()
+        local puncts = '< > { } [ ] ( ) + - * / ** // % . <= <> << >= >> == != ! , : @ ~ & | ^ $ && ||'
+        local tokenizer = make_tokenizer(puncts)
+        local tokens = collect_tokens(tokenizer)
+        local types = {
+        LT, GT, LCURLY, RCURLY,
+            LBRACK, RBRACK, LPAREN, RPAREN,
+            PLUS, MINUS, STAR, SLASH,
+            POWER, SLASHSLASH, MODULO, DOT,
+            LE, ALT_NEQ, LSHIFT, GE,
+            RSHIFT, EQ, NEQ, NOT, COMMA,
+            COLON, AT, TILDE, BITAND,
+            BITOR, BITXOR, DOLLAR, AND,
+            OR
+        }
+        local actuals = map(tokens, attrgetter('type'))
+        lu.assertEquals(actuals, types)
+        local texts = split(puncts)
+        actuals = map(tokens, attrgetter('text'))
+        lu.assertEquals(actuals, texts)
+        lu.assertFalse(any(tokens, function(t)
+            return t.value ~= nil
+        end))
     end,
 }
 
