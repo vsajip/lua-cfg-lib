@@ -8,6 +8,7 @@
 --
 
 local charcats = require('charcats')
+local complex = require('complex')
 
 local Location = {
     next_line = function(self)
@@ -231,7 +232,11 @@ end
 
 local function is_digit(c)
     local cp = utf8.codepoint(c, 1, #c)
-    return charcats.Nd[c]
+    return charcats.Nd[cp]
+end
+
+local function is_hex_digit(c)
+    return c:match('[0-9A-Fa-f]') == c
 end
 
 local function is_letter_or_digit(c)
@@ -249,6 +254,17 @@ local function copy_array(t)
         table.insert(result, v)
     end
     return result
+end
+
+local function index_of(t, item, pos)
+    for i = pos or 1, #t do
+        local v = t[i]
+        if v == item then
+            return i
+        end
+    end
+    return nil
+
 end
 
 local PUNCTUATION = {
@@ -305,7 +321,7 @@ local ESCAPES = {
     ['v'] = '\x0B',
     ['\\'] = '\\',
     ['\''] = '\'',
-    ['"'] = '"' 
+    ['"'] = '"'
 }
 
 local function parse_escapes(s)
@@ -411,7 +427,110 @@ local Tokenizer = {
         end
     end,
 
-    get_number = function(self, start_loc, end_loc)
+    get_number = function(self, token, start_loc, end_loc)
+        local type = INTEGER
+        local value
+        local in_exponent = false
+        local radix = 0
+        local dot_seen = index_of(token, '.')
+        local last_was_digit = is_digit(token[#token])
+        local c
+        local s
+        local msg
+
+        while true do
+            c = self:get_char()
+            if not c then break end
+            if c == '.' then dot_seen = true end
+            if c == '_' then
+                if last_was_digit then
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                    last_was_digit = false
+                else
+                    msg = string.format('Invalid \'_\' in number: %s',
+                                        table.concat(token, '') .. c)
+                    error(msg, 2)
+                end
+            else
+                last_was_digit = false  -- unless set by one of the clauses below
+                if (((radix == 0) and (c >= '0') and (c <= '9')) or
+                    ((radix == 2) and (c >= '0') and (c <= '1')) or
+                    ((radix == 8) and (c >= '0') and (c <= '7')) or
+                    ((radix == 16) and is_hex_digit(c))) then
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                    last_was_digit = true
+                elseif (((c == 'o') or (c == 'O') or
+                         (c == 'x') or (c == 'X') or
+                         (c == 'b') or (c == 'B'))
+                         and (#token == 1) and (token[1] == '0')) then
+                    if (c == 'x') or (c == 'X') then
+                        radix = 16
+                    elseif (c == 'o') or (c == 'O') then
+                        radix = 8
+                    else
+                        radix = 2
+                    end
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                elseif (radix == 0) and (c == '.') and not in_exponent and not index_of(token, c) then
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                elseif (radix == 0) and (c == '-') and not index_of(token, '-', 2) and in_exponent then
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                elseif (radix == 0) and ((c == 'e') or (c == 'E')) and
+                    not index_of(token, 'e') and not index_of(token, 'E') and (token[#token] ~= '_') then
+                    table.insert(token, c)
+                    end_loc:update(self.char_location)
+                    in_exponent = true
+                else
+                    break
+                end
+            end
+        end
+        -- Reached the end of the actual number part. Before checking
+        -- for complex, ensure that the last char wasn't an underscore.
+        if token[#token] == '_' then
+            s = table.concat(token, '')
+            msg = string.format('Invalid \'_\' at end of number: %s', s)
+            error(s, 2)
+        end
+        if (radix == 0) and ((c == 'j') or (c == 'J')) then
+            table.insert(token, c)
+            end_loc:update(self.char_location)
+            type = COMPLEX
+        else
+            -- not allowed to have a letter or digit which wasn't accepted
+            if c and (c ~= '.') and not is_letter_or_digit(c) then
+                self:push_back(c)
+            elseif c then
+                s = table.concat(token, '')
+                msg = string.format('Invalid character in number: %s', s)
+                error(s, 2)
+            end
+        end
+        s = table.concat(token, '')
+        s = s:gsub('[_]', '')
+        if radix ~= 0 then
+            value = tonumber(s:sub(3), radix)
+        elseif type == COMPLEX then
+            local imag = tonumber(s:sub(1, #s - 2))
+            -- TODO set value to complex
+        elseif in_exponent or dot_seen then
+            type = FLOAT
+            value = tonumber(s)
+        else
+            if token[1] == '0' then
+                radix = 8
+            else
+                radix = 10
+            end
+            -- TODO bad octal constant
+            value = tonumber(s, radix)
+        end
+        return type, value
     end,
 
     get_token = function(self)
@@ -586,6 +705,11 @@ local Tokenizer = {
                     error(s, 2)
                 end
                 value = parse_escapes(text:sub(qlen + 1, -(qlen + 1)))
+                break
+            elseif is_digit(c) then
+                table.insert(token, c)
+                end_loc:update(self.char_location)
+                type, value = self:get_number(token, start_loc, end_loc)
                 break
             else
                 local s = string.format('Unexpected character: \'%s\'', c)

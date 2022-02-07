@@ -9,6 +9,7 @@
 
 local lu = require('luaunit')
 local config = require('config')
+local complex = require('complex')
 
 local Location = config.Location
 local Stream = config.Stream
@@ -269,6 +270,47 @@ TestTokenizer = {
         lu.assertEquals(actuals, values)
     end,
 
+    test_integer_literals = function()
+        local cases = {
+            {'0x123aBc', 0x123abc},
+            {'0o123', 83},
+            {'0123', 83},
+            {'0b0001_0110_0111', 0x167}
+        }
+        for i, c in ipairs(cases) do
+            local s, v = table.unpack(c)
+            local tokenizer = make_tokenizer(s)
+            local t = tokenizer:get_token()
+            lu.assertEquals(t.type, INTEGER)
+            lu.assertEquals(t.text, s)
+            lu.assertEquals(t.value, v)
+            t = tokenizer:get_token()
+            lu.assertEquals(t.type, EOF)
+        end
+    end,
+
+    test_float_literals = function()
+        local cases = {
+            {'2.71828', 2.71828},
+            {'.5', 0.5},
+            {'-.5', -0.5},
+            {'1e8', 1e8},
+            {'1e-8', 1e-8},
+            {'-4e8', -4e8},
+            {'-3e-8', -3e-8}
+        }
+        for i, c in ipairs(cases) do
+            local s, v = table.unpack(c)
+            local tokenizer = make_tokenizer(s)
+            local t = tokenizer:get_token()
+            lu.assertEquals(t.type, FLOAT)
+            lu.assertEquals(t.text, s)
+            lu.assertEquals(t.value, v)
+            t = tokenizer:get_token()
+            lu.assertEquals(t.type, EOF)
+        end
+    end,
+
     test_string_literals = function()
         local cases = {
             {"'foo'", 'foo'},
@@ -341,7 +383,7 @@ TestTokenizer = {
         end
     end,
 
-    test_bad_escapes = function()
+    ztest_bad_escapes = function()
         local cases = {
             "'\\z'",
             "'\\x'",
@@ -367,7 +409,7 @@ TestTokenizer = {
         end
     end,
 
-    test_bad_strings = function()
+    ztest_bad_strings = function()
         local cases = {
             {"\'", "Unterminated quoted string:", 1, 1},
             {"\"", "Unterminated quoted string:", 1, 1},
