@@ -224,6 +224,7 @@ local function load_data(path)
         result[key] = table.concat(value, '\n')
         table.insert(keys, key)
     end
+    f:close()
     return result, keys
 end
 
@@ -402,6 +403,22 @@ TestTokenizer = {
         end
     end,
 
+    test_complex_literals = function ()
+        local cases = {
+            {'4.3j', complex.to({0, 4.3})},
+        }
+        for i, c in ipairs(cases) do
+            local s, v = table.unpack(c)
+            local tokenizer = make_tokenizer(s)
+            local t = tokenizer:get_token()
+            lu.assertEquals(t.type, COMPLEX)
+            lu.assertEquals(t.text, s)
+            lu.assertEquals(t.value, v)
+            t = tokenizer:get_token()
+            lu.assertEquals(t.type, EOF)
+        end
+    end,
+
     test_string_literals = function()
         local cases = {
             {"'foo'", 'foo'},
@@ -521,6 +538,9 @@ TestTokenizer = {
         end
     end,
 
+    test_bad_tokens = function()
+    end,
+
     test_punctuation = function()
         local puncts = '< > { } [ ] ( ) + - * / ** // % . <= <> << >= >> == != ! , : @ ~ & | ^ $ && ||'
         local tokenizer = make_tokenizer(puncts)
@@ -582,6 +602,32 @@ TestTokenizer = {
                 lu.assertEquals(tokens, expected[k])
             end
         end
+    end,
+
+    test_locations = function ()
+        local p = data_file_path('pos.forms.cfg.txt')
+        local f = io.open(p)
+        local positions = {}
+        for line in f:lines() do
+            local parts = split(line)
+            local ints = map(parts, tonumber)
+            table.insert(positions, ints)
+        end
+        f:close()
+        p = data_file_path('forms.cfg')
+        local stream = Stream:from_file(p)
+        local tokenizer = Tokenizer:new(stream)
+        for i, pos in ipairs(positions) do
+            local sl, sc, el, ec = table.unpack(pos)
+            local spos = Location:new(sl, sc)
+            local epos = Location:new(el, ec)
+            local t = tokenizer:get_token()
+            lu.assertEquals(t.spos, spos)
+            lu.assertEquals(t.epos, epos)
+            if t.type == EOF then break end
+        end
+        lu.assertEquals(i, #positions)
+        stream:close()
     end,
 }
 

@@ -128,6 +128,12 @@ local Stream = {
         end
         return c1..c2
     end,
+
+    close = function(self)
+        if self.file then
+            self.file:close()
+        end
+    end,
 }
 
 -- local function enum(tbl)
@@ -532,8 +538,8 @@ local Tokenizer = {
         if radix ~= 0 then
             value = tonumber(s:sub(3), radix)
         elseif type == COMPLEX then
-            local imag = tonumber(s:sub(1, #s - 2))
-            -- TODO set value to complex
+            local imag = tonumber(s:sub(1, #s - 1))
+            value = complex.to({0, imag})
         elseif in_exponent or dot_seen then
             type = FLOAT
             value = tonumber(s)
