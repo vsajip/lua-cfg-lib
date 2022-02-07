@@ -15,6 +15,7 @@ local Location = config.Location
 local Stream = config.Stream
 local TokenType = config.TokenType
 local Tokenizer = config.Tokenizer
+local Token = config.Token
 
 -- Add the token types to the globals so that we don't need to qualify them
 -- in this file. We remove them at the end
@@ -164,7 +165,73 @@ local function compare_arrays(a1, a2)
       end
     end
     return true
-  end
+end
+
+local function make_token(t, s, v, sl, sc, el, ec)
+    local result = Token:new(t, s, v)
+
+    if sl then
+        result.spos = Location:mew(sl, sc)
+    end
+    if el then
+        result.epos = Location:new(el, ec)
+    end
+    return result
+end
+
+local function W(s, sl, sc)
+    local ec = sc + #s - 1
+    return make_token(WORD, s, nil, sl, sc, sl, ec)
+end
+
+local function T(t, s, v, sl, sc)
+    local el, ec
+
+    if t == NEWLINE then
+        el = sl + 1
+        ec = 0
+    else
+        el = sc
+        ec = sc + #s - 1
+    end
+    return make_token(t, s, v, sl, sc, el, sc)
+end
+
+local function load_data(path)
+    local result = {}
+    local key
+    local value = {}
+    local keys = {}
+    local separator = '^%-%- ([A-Z]%d+) %-+'
+    local f = io.open(path)
+    for line in f:lines() do
+        local capture = line:match(separator)
+        if not capture then
+            table.insert(value, line)
+        else
+            if key and #value > 0 then
+                result[key] = table.concat(value, '\n')
+                table.insert(keys, key)
+            end
+            key = capture
+            value = {}
+        end
+    end
+    if key and #value > 0 then
+        result[key] = table.concat(value, '\n')
+        table.insert(keys, key)
+    end
+    return result, keys
+end
+
+local function data_file_path(...)
+    local p = {'resources'}
+    local parts = table.pack(...)
+    for i = 1, parts.n do
+        table.insert(p, parts[i])
+    end
+    return table.concat(p, '/')  -- works on Windows too
+end
 
 TestStream = {
     test_string = function()
@@ -474,6 +541,21 @@ TestTokenizer = {
         lu.assertFalse(any(tokens, function(t)
             return t.value ~= nil
         end))
+    end,
+
+    test_data = function()
+        local p = data_file_path('testdata.txt')
+        local cases, keys = load_data(p)
+        local expected = {
+
+        }
+        table.sort(keys)
+        for _, k in ipairs(keys) do
+            if expected[k] then
+                local tokenizer = make_tokenizer(cases[k])
+                local tokens = collect_tokens(tokenizer)
+            end
+        end
     end,
 }
 
