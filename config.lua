@@ -2,7 +2,7 @@
 -- A library for working with the CFG configuration format.
 --
 -- @author   Vinay Sajip <http://vinay_sajip@yahoo.co.uk>
--- @copyright (C) 2022 Vinay Sajip. See LICENSE for licensing information.
+-- @copyright (C) 2022-2024 Vinay Sajip. See LICENSE for licensing information.
 -- @license  BSD-3-Clause
 -- @see https://docs.red-dove.com/cfg/
 --
@@ -378,6 +378,10 @@ local function parse_escapes(s)
             local p = s:sub(i + 2, i + slen - 1)
             local cp = tonumber(p, 16)
             if cp == nil then
+                local msg = string.format('Invalid escape sequence at position %d', i)
+                error(msg, 2)
+            end
+            if cp >= 0x110000 then
                 local msg = string.format('Invalid escape sequence at position %d', i)
                 error(msg, 2)
             end

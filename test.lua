@@ -2,7 +2,7 @@
 -- A test harness for the library for working with the CFG configuration format.
 --
 -- @author   Vinay Sajip <http://vinay_sajip@yahoo.co.uk>
--- @copyright (C) 2022 Vinay Sajip. See LICENSE for licensing information.
+-- @copyright (C) 2022-2024 Vinay Sajip. See LICENSE for licensing information.
 -- @license  BSD-3-Clause
 -- @see https://docs.red-dove.com/cfg/
 --
