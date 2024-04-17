@@ -207,12 +207,24 @@ function complex.print( ... )
 	print( complex.tostring( ... ) )
 end
 
+local function get_atan()
+	local v = _VERSION:match('%d.%d')
+	local last = v:sub(#v, #v)
+	if last < '3' then
+		return math.atan2
+	else
+		return math.atan
+	end
+end
+
+local atan = get_atan()
+
 -- complex.polar( cx )
 -- from complex number to polar coordinates
 -- output in radians; [-pi,+pi]
 -- returns r (radius), phi (angle)
 function complex.polar( cx )
-	return math.sqrt( cx[1]^2 + cx[2]^2 ), math.atan2( cx[2], cx[1] )
+	return math.sqrt( cx[1]^2 + cx[2]^2 ), atan( cx[2], cx[1] )
 end
 
 -- complex.polardeg( cx )
@@ -220,7 +232,7 @@ end
 -- output in degrees; [-180, 180 deg]
 -- returns r (radius), phi (angle)
 function complex.polardeg( cx )
-	return math.sqrt( cx[1]^2 + cx[2]^2 ), math.atan2( cx[2], cx[1] ) / math.pi * 180
+	return math.sqrt( cx[1]^2 + cx[2]^2 ), atan( cx[2], cx[1] ) / math.pi * 180
 end
 
 -- complex.norm2( cx )
@@ -323,7 +335,7 @@ function complex.pow( cx,num )
 	-- we calculate the polar complex number now
 	-- since then we have the versatility to calc any potenz of the complex number
 	-- then we convert it back to a carthesic complex number, we loose precision here
-	local length,phi = math.sqrt( cx[1]^2 + cx[2]^2 )^num, math.atan2( cx[2], cx[1] )*num
+	local length,phi = math.sqrt( cx[1]^2 + cx[2]^2 )^num, atan( cx[2], cx[1] )*num
 	return setmetatable( { length * math.cos( phi ), length * math.sin( phi ) }, complex_meta )
 end
 
@@ -339,7 +351,7 @@ end
 -- natural logarithm of cx
 function complex.ln( cx )
 	return setmetatable( { math.log(math.sqrt( cx[1]^2 + cx[2]^2 )),
-		math.atan2( cx[2], cx[1] ) }, complex_meta )
+		atan( cx[2], cx[1] ) }, complex_meta )
 end
 
 -- complex.exp( cx )

@@ -286,7 +286,6 @@ local function index_of(t, item, pos)
         end
     end
     return nil
-
 end
 
 local PUNCTUATION = {
@@ -458,7 +457,7 @@ local Tokenizer = {
         local value
         local in_exponent = false
         local radix = 0
-        local dot_seen = index_of(token, '.')
+        local dot_seen = index_of(token, '.') ~= nil
         local last_was_digit = is_digit(token[#token])
         local c
         local s

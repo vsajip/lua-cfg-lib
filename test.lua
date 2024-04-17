@@ -425,6 +425,9 @@ TestTokenizer = {
             {'"bar"', 'bar'},
             {'"""abc\ndef\n"""', 'abc\ndef\n'},
             {'"\\n"', '\n'},
+            {"'\\xfcber'", 'über'},
+            {"'\\U0001f602-tears-joy'", '😂-tears-joy'},
+            {"'\\a\\b\\f\\n\\r\\t\\v\\\\'", '\a\b\f\n\r\t\v\\'},
         }
 
         for _, c in ipairs(cases) do
