@@ -617,7 +617,9 @@ TestTokenizer = {
         p = data_file_path('forms.cfg')
         local stream = Stream:from_file(p)
         local tokenizer = Tokenizer:new(stream)
+        local j
         for i, pos in ipairs(positions) do
+            j = i
             local sl, sc, el, ec = table.unpack(pos)
             local spos = Location:new(sl, sc)
             local epos = Location:new(el, ec)
@@ -626,7 +628,7 @@ TestTokenizer = {
             lu.assertEquals(t.epos, epos)
             if t.type == EOF then break end
         end
-        lu.assertEquals(i, #positions)
+        lu.assertEquals(j, #positions)
         stream:close()
     end,
 }

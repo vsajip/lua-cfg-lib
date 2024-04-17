@@ -448,7 +448,7 @@ local Tokenizer = {
     push_back = function(self, c)
         if c then
             local pb = self.pushed_back
-            local pbitem = { c = c, loc = self.location, cloc = self.char_location }
+            local pbitem = { c = c, loc = self.location:copy(), cloc = self.char_location:copy() }
             pb[1 + #pb] = pbitem
         end
     end,
