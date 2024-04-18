@@ -12,7 +12,8 @@ description = {
     license = 'BSD-3-Clause'
 }
 dependencies = {
-    'lua >= 5.3'
+    'lua >= 5.3',
+    'luafilesystem >= 1.8.0'
 }
 build = {
     type = 'none',

@@ -29,6 +29,7 @@ jobs:
     - name: Install dependencies
       run: |
         luarocks install luaunit
+        luarocks install luafilesystem
     - name: Run tests on Windows after setting the HOME environment variable
       if: ${{ matrix.os == 'windows-latest' }}
       run: |

@@ -211,6 +211,7 @@ local function get_atan()
 	local v = _VERSION:match('%d.%d')
 	local last = v:sub(#v, #v)
 	if last < '3' then
+---@diagnostic disable-next-line: deprecated
 		return math.atan2
 	else
 		return math.atan
