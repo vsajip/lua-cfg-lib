@@ -21,11 +21,11 @@ jobs:
       if: ${{ matrix.os == 'windows-latest' }}
       uses: ilammy/msvc-dev-cmd@v1
     - name: Set up Lua
-      uses: leafo/gh-actions-lua@v10
+      uses: jkl1337/gh-actions-lua@v11
       with:
         luaVersion: ${{matrix.luaver}}
     - name: Install Luarocks
-      uses: leafo/gh-actions-luarocks@v4
+      uses: jkl1337/gh-actions-luarocks@v5
     - name: Install dependencies
       run: |
         luarocks install luaunit
