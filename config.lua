@@ -1,25 +1,39 @@
 --
 -- A library for working with the CFG configuration format.
 --
--- @author   Vinay Sajip <vinay_sajip@yahoo.co.uk>
--- @copyright (C) 2022-2024 Vinay Sajip. See LICENSE for licensing information.
+-- @author   Vinay Sajip <5 Vinay Sajip. See LICENSE for licensing information.
 -- @license  BSD-3-Clause
 -- @see https://docs.red-dove.com/cfg/
 --
 
 local charcats = require('charcats')
 local complex = require('complex')
-local lfs = require('lfs')
-local niltable = require('niltable')
 local path = require('path')
-local inspect = require('inspect')
-local dbg = require('debugger')
+-- local inspect = require('inspect')
+-- local log = require('log')
+-- local dbg = require('debugger')
 
-local ntmt = getmetatable(niltable({}))
+local function get_type(obj)
+    local result = type(obj)
 
-local function is_niltable(t)
-    return getmetatable(t) == ntmt
+    if result == 'table' and complex.type(obj) == 'complex' then
+        result = 'complex'
+    end
+    return result
 end
+
+-- local class_name_map = {}
+
+local Date = {
+    new = function(self, o)
+        self.__index = self
+        self.__tag__ = 'Date'
+        setmetatable(o, self)
+        return o
+    end,
+}
+
+-- class_name_map[Date] = 'Date'
 
 local Location = {
     next_line = function(self)
@@ -60,8 +74,8 @@ end
 
 local Stream = {
 
-    from_file = function(self, path)
-        local o = { path = path, file = io.open(path, 'rb') }
+    from_file = function(self, filepath)
+        local o = { path = filepath, file = io.open(filepath, 'rb') }
         o.extent = o.file:seek('end')
         o.file:seek('set')
         o.at_end = o.file:seek() == o.extent
@@ -237,10 +251,90 @@ local function str_repr(s)
     end)
 end
 
+local function instance_of(instance, class)
+    -- local cn = class_name_map[class]
+    -- if cn == nil then dbg() end
+    class = tostring(class)
+    local mt = getmetatable(instance)
+    local result
+
+    while true do
+        if mt == nil then
+            result = false
+            break
+        elseif tostring(mt) == class then
+            result = true
+            break
+        else
+            mt = getmetatable(mt)
+        end
+    end
+    -- log.debug('instance_of', cn, result, inspect(instance))
+    return result
+end
+
+local function is_terminal_value(o)
+    local t = type(o)
+
+    return (t == 'string') or (t == 'number') or (t == 'boolean') or instance_of(o, Date) or (o == NIL)
+end
+
+local function concat_arrays(t1, t2)
+    local result = { table.unpack(t1) }
+
+    for i = 1, #t2 do
+        result[#result + 1] = t2[i]
+    end
+    return result
+end
+
+local function contains_key(t, key)
+    for k, _ in pairs(t) do
+        if k == key then
+            return true
+        end
+    end
+    return false
+end
+
+local function is_array(t)
+    local result = false
+
+    -- if type(t) ~= 'table' then dbg() end
+    if type(t) == 'table' then
+        result = true
+        for k in pairs(t) do
+            if type(k) ~= 'number' then
+                result = false
+                break
+            end
+        end
+    end
+    -- log.debug('is_array', result, inspect(t))
+    return result
+end
+
+local function is_mapping(t)
+    local result = false
+
+    if type(t) == 'table' and getmetatable(t) == nil then -- no for things with metatables like AST nodes
+        result = true
+        for k in pairs(t) do
+            if type(k) ~= 'string' then
+                result = false
+                break
+            end
+        end
+    end
+    -- log.debug('is_mapping', result, inspect(t))
+    return result
+end
+
 local Token = {
     new = function(self, type, text, value)
         local o = { type = type, text = text, value = value }
         self.__index = self
+        self.__tag__ = 'Token'
         setmetatable(o, self)
         return o
     end,
@@ -259,6 +353,8 @@ local Token = {
         return result
     end,
 }
+
+-- class_name_map[Token] = 'Token'
 
 local function is_letter(c)
     local cp = utf8.codepoint(c, 1, #c)
@@ -285,7 +381,7 @@ end
 
 local function copy_array(t)
     local result = {}
-    for i, v in ipairs(t) do
+    for _, v in ipairs(t) do
         table.insert(result, v)
     end
     return result
@@ -301,19 +397,33 @@ local function index_of(t, item, pos)
     return nil
 end
 
-local function instance_of(instance, class)
-    class = tostring(class)
-    local mt = getmetatable(instance)
+local function merge_tables(t1, t2)
+    local result = {}
 
-    while true do
-        if mt == nil then
-            return false
-        elseif tostring(mt) == class then
-            return true
+    for k, v in pairs(t2) do
+        if (not contains_key(t1, k)) or (not is_mapping(v)) or (not is_mapping(t1[k])) then
+            result[k] = v
         else
-            mt = getmetatable(mt)
+            result[k] = merge_tables(t1[k], v)
         end
     end
+    for k, v in pairs(t1) do
+        if not contains_key(result, k) then
+            result[k] = v
+        end
+    end
+    return result
+end
+
+local function subtract_tables(t1, t2)
+    local result = {}
+
+    for k, v in pairs(t1) do
+        if not contains_key(t2, k) then
+            result[k] = v
+        end
+    end
+    return result
 end
 
 local os_sep = package.config:sub(1, 1)
@@ -365,10 +475,17 @@ local KEYWORDS = {
     ['or'] = OR,
 }
 
+local NIL = {
+    __tostring = function()
+        return 'NIL'
+    end,
+}
+setmetatable(NIL, NIL)
+
 local KEYWORD_VALUES = {
     ['true'] = true,
     ['false'] = false,
-    ['nil'] = {}, -- can't use nil
+    ['null'] = NIL, -- can't use nil
 }
 
 local ESCAPES = {
@@ -423,7 +540,7 @@ local function parse_escapes(s)
                 local msg = string.format('Invalid escape sequence at position %d', i)
                 error(msg, 2)
             end
-            local ok, msg = pcall(function()
+            local ok, _ = pcall(function()
                 table.insert(sb, utf8.char(cp))
             end)
             if not ok then
@@ -444,6 +561,15 @@ local function parse_escapes(s)
     end
     return table.concat(sb, '') .. s
 end
+
+local LexerError = {
+    new = function(self, msg, pos)
+        local o = { message = msg, pos = pos }
+        self.__index = self
+        setmetatable(o, self)
+        return o
+    end,
+}
 
 local Tokenizer = {
     new = function(self, stream)
@@ -500,7 +626,7 @@ local Tokenizer = {
         local last_was_digit = is_digit(token[#token])
         local c
         local s
-        local msg
+        local msg, err
 
         while true do
             c = self:get_char()
@@ -517,7 +643,8 @@ local Tokenizer = {
                     last_was_digit = false
                 else
                     msg = string.format("Invalid '_' in number: %s", table.concat(token, '') .. c)
-                    error(msg, 2)
+                    err = LexerError:new(msg, start_loc)
+                    error(err, 2)
                 end
             else
                 last_was_digit = false -- unless set by one of the clauses below
@@ -570,7 +697,8 @@ local Tokenizer = {
         if token[#token] == '_' then
             s = table.concat(token, '')
             msg = string.format("Invalid '_' at end of number: %s", s)
-            error(s, 2)
+            err = LexerError:new(msg, self.char_location)
+            error(err, 2)
         end
         if (radix == 0) and ((c == 'j') or (c == 'J')) then
             table.insert(token, c)
@@ -583,7 +711,8 @@ local Tokenizer = {
             elseif c then
                 s = table.concat(token, '')
                 msg = string.format('Invalid character in number: %s', s)
-                error(s, 2)
+                err = LexerError:new(msg, self.char_location)
+                error(err, 2)
             end
         end
         s = table.concat(token, '')
@@ -703,7 +832,9 @@ local Tokenizer = {
                 end
                 if c ~= '\n' then
                     local s = string.format("Unexpected character: '\\'", c)
-                    error(s, 2)
+                    local err = LexerError:new(s, self.char_location)
+
+                    error(err, 2)
                 end
                 end_loc:update(self.char_location)
             elseif is_letter(c) or (c == '_') then
@@ -721,9 +852,6 @@ local Tokenizer = {
                 if KEYWORDS[text] then
                     type = KEYWORDS[text]
                     value = KEYWORD_VALUES[text]
-                    if value == {} then
-                        value = nil
-                    end
                 end
                 break
             elseif c == '`' then
@@ -744,7 +872,9 @@ local Tokenizer = {
                 text = table.concat(token, '')
                 if c == nil then
                     local s = string.format('Unterminated `-string: %s', text)
-                    error(s, 2)
+                    local err = LexerError:new(s, start_loc)
+
+                    error(err, 2)
                 end
                 end_loc:update(self.char_location)
                 value = parse_escapes(text:sub(2, -2))
@@ -796,7 +926,9 @@ local Tokenizer = {
                 text = table.concat(token, '')
                 if not c then
                     local s = string.format('Unterminated quoted string: %s', text)
-                    error(s, 2)
+                    local err = LexerError:new(s, start_loc)
+
+                    error(err, 2)
                 end
                 value = parse_escapes(text:sub(qlen + 1, -(qlen + 1)))
                 break
@@ -912,7 +1044,9 @@ local Tokenizer = {
                 break
             else
                 local s = string.format("Unexpected character: '%s'", c)
-                error(s, 2)
+                local err = LexerError:new(s, self.char_location)
+
+                error(err, 2)
             end
             ::continue::
         end
@@ -959,16 +1093,9 @@ local EXPRESSION_STARTERS = make_set(
     WORD
 )
 local COMPARISON_OPERATORS = make_set(LT, LE, GT, GE, EQ, NEQ, ALT_NEQ, IS, IN, NOT)
-local SCALAR_TOKENS = make_set(STRING, INTEGER, FLOAT, COMPLEX, TRUE, FALSE, NONE)
+-- local SCALAR_TOKENS = make_set(STRING, INTEGER, FLOAT, COMPLEX, TRUE, FALSE, NONE)
 
-local ParserError = {
-    new = function(self, msg, pos)
-        local o = { message = msg, pos = pos }
-        self.__index = self
-        setmetatable(o, self)
-        return o
-    end,
-}
+local ParserError = LexerError:new()
 
 local UnaryNode = {
     new = function(self, op, operand)
@@ -979,10 +1106,13 @@ local UnaryNode = {
             operand = operand,
         }
         self.__index = self
+        self.__tag__ = 'UnaryNode'
         setmetatable(o, self)
         return o
     end,
 }
+
+-- class_name_map[UnaryNode] = 'UnaryNode'
 
 local BinaryNode = {
     new = function(self, op, lhs, rhs)
@@ -995,14 +1125,28 @@ local BinaryNode = {
             rhs = rhs,
         }
         self.__index = self
+        self.__tag__ = 'BinaryNode'
         setmetatable(o, self)
         return o
     end,
 }
 
-local ListNode = function(elements)
-    return { elements = elements }
-end
+-- class_name_map[BinaryNode] = 'BinaryNode'
+
+local ListNode = {
+    new = function(self, elements)
+        assert(elements, 'Elements must be specified')
+        local o = {
+            elements = elements,
+        }
+        self.__index = self
+        self.__tag__ = 'ListNode'
+        setmetatable(o, self)
+        return o
+    end,
+}
+
+-- class_name_map[ListNode] = 'ListNode'
 
 local MappingEntry = function(k, v)
     return { key = k, value = v }
@@ -1015,10 +1159,13 @@ local MappingNode = {
             elements = elements,
         }
         self.__index = self
+        self.__tag__ = 'MappingNode'
         setmetatable(o, self)
         return o
     end,
 }
+
+-- class_name_map[MappingNode] = 'MappingNode'
 
 local SliceNode = function(start, stop, step)
     return {
@@ -1030,6 +1177,38 @@ end
 
 local TrailerResult = function(op, operand)
     return { op = op, operand = operand }
+end
+
+local function is_ast_node(node)
+    if type(node) ~= 'table' then
+        return false
+    end
+    return (
+        instance_of(node, UnaryNode)
+        or instance_of(node, BinaryNode)
+        or instance_of(node, MappingNode)
+        or instance_of(node, ListNode)
+        or instance_of(node, Token)
+    )
+end
+
+local function is_node_list(t)
+    if not is_array(t) then
+        return false
+    end
+
+    return is_ast_node(t[1])
+end
+
+local function is_node_map(t)
+    if not is_mapping(t) then
+        return false
+    end
+
+    for _, v in pairs(t) do
+        return is_ast_node(v)
+    end
+    return false
 end
 
 local Parser = {
@@ -1046,7 +1225,7 @@ local Parser = {
     end,
 
     at_end = function(self)
-        return self.next.kind == EOF
+        return self.next.type == EOF
     end,
 
     advance = function(self)
@@ -1132,7 +1311,6 @@ local Parser = {
         elseif type == DOLLAR then
             self:advance()
             self:expect(LCURLY)
-            local spos = self.next.spos
             result = UnaryNode:new(DOLLAR, self:primary())
             self:expect(RCURLY)
         elseif type == LPAREN then
@@ -1175,8 +1353,8 @@ local Parser = {
             end
 
             local try_get_step = function()
-                local type = self:advance()
-                if type ~= RBRACK then
+                local ttype = self:advance()
+                if ttype ~= RBRACK then
                     step = get_slice_element()
                 end
             end
@@ -1294,7 +1472,7 @@ local Parser = {
             self:advance()
             type = self:consume_newlines()
         end
-        local result = ListNode(elements)
+        local result = ListNode:new(elements)
         result.spos = spos
         return result
     end,
@@ -1491,19 +1669,166 @@ local is_identifier = function(s)
     return result
 end
 
-local default_string_converter = function()
-    
+local DATE_PATTERN = '(%d%d%d%d)%-(%d%d)%-(%d%d)'
+local TIME_PATTERN = '[ T](%d%d):(%d%d):(%d%d)%.?(%d*)'
+local OFFSET_PATTERN = '([+-])(%d%d):(%d%d)'
+local OFFSET_SECONDS_PATTERN = ':(%d%d.?%d*)'
+
+local DATETIME_PATTERN = DATE_PATTERN .. TIME_PATTERN
+local DTO_PATTERN = DATETIME_PATTERN .. OFFSET_PATTERN
+local DTOF_PATTERN = DTO_PATTERN .. OFFSET_SECONDS_PATTERN
+
+local function parse_iso_date(s)
+    local year, month, day, hour, minute, second, frac, osign, ohour, omin, osec
+
+    year, month, day, hour, minute, second, frac, osign, ohour, omin, osec = s:match('^' .. DTOF_PATTERN .. '$')
+
+    if not year then
+        year, month, day, hour, minute, second, frac, osign, ohour, omin = s:match('^' .. DTO_PATTERN .. '$')
+        osec = '0'
+    end
+    if not year then
+        year, month, day, hour, minute, second, frac = s:match('^' .. DATETIME_PATTERN .. '$')
+        osign, ohour, omin, osec = '+', '0', '0', '0'
+    end
+
+    if not year then
+        year, month, day = s:match('^' .. DATE_PATTERN .. '$')
+        hour, minute, second, frac = '0', '0', '0', '0'
+        osign, ohour, omin, osec = '+', '0', '0', '0'
+    end
+
+    if not year then
+        return nil
+    end
+
+    local o = {
+        year = tonumber(year),
+        month = tonumber(month),
+        day = tonumber(day),
+        hour = tonumber(hour),
+        minute = tonumber(minute),
+        second = tonumber(second) + tonumber('0.' .. frac),
+        offset_sign = osign,
+        offset_hour = tonumber(ohour),
+        offset_minute = tonumber(omin),
+        offset_second = tonumber(osec),
+    }
+    return Date:new(o)
+end
+
+local ENV_NAME_PATTERN = '%$(%w+)'
+local ENV_DEFAULT_PATTERN = ENV_NAME_PATTERN .. '%|(.*)'
+
+local function parse_env_value(s)
+    local name, default_value, result
+    local matched = false
+
+    name, default_value = s:match('^' .. ENV_DEFAULT_PATTERN .. '$')
+    if not name then
+        name = s:match('^' .. ENV_NAME_PATTERN .. '$')
+    end
+    if name ~= nil then
+        matched = true
+        result = os.getenv(name)
+        if result == nil and default_value ~= nil then
+            result = default_value
+        end
+    end
+    return matched, result
+end
+
+local INTERPOLATION_PATTERN = '%$%{([^}]+)%}'
+
+local function parse_interpolation(s, cfg)
+    local result
+    local matched = false
+    -- local failed = false
+    local expr
+
+    local function to_string(v)
+        local t = type(v)
+        local s
+        if t == 'string' then
+            return v
+        elseif (t == 'number') or (t == 'boolean') then
+            return tostring(v)
+        elseif is_array(v) then
+            local parts = {}
+            for _, p in ipairs(v) do
+                table.insert(parts, to_string(p))
+            end
+            s = table.concat(parts, ', ')
+            return string.format('[%s]', s)
+        elseif is_mapping(v) then
+            local parts = {}
+
+            for k, p in pairs(v) do
+                s = string.format('%s: %s', k, to_string(p))
+                table.insert(parts, s)
+            end
+            s = table.concat(parts, ', ')
+            return string.format('{%s}', s)
+        else
+            error('Not implemented!', 2)
+        end
+    end
+
+    local function replacer(m)
+        local ok, r = pcall(function()
+            return cfg[m]
+        end)
+        if not ok then
+            return nil
+        else
+            return to_string(r)
+        end
+    end
+
+    expr = s:match(INTERPOLATION_PATTERN)
+    if expr ~= nil then
+        matched = true
+        result = s:gsub(INTERPOLATION_PATTERN, replacer)
+    end
+    return matched, result
+end
+
+local default_string_converter = function(s, cfg)
+    local result = s
+    local dt = parse_iso_date(s)
+    if dt ~= nil then
+        result = dt
+    else
+        local matched, ev
+
+        matched, ev = parse_env_value(s)
+        if matched then
+            result = ev
+        else
+            local iv
+            matched, iv = parse_interpolation(s, cfg)
+            if matched then
+                result = iv
+            end
+        end
+    end
+    return result
 end
 
 local ConfigError = ParserError:new()
 
+local function not_implemented(pos)
+    local ce = ConfigError:new('Not implemented', pos)
+
+    error(ce, 2)
+end
+
 local function parse_path(s)
-    -- dbg()
     local stream = Stream:from_string(s)
     local p = Parser:new(stream)
     local result = p:primary()
     if not p:at_end() then
-        local msg = string.format("Extra text after path in '%s'", s);
+        local msg = string.format("Extra text after path in '%s'", s)
         local ce = ConfigError:new(msg, p.next.spos)
 
         error(ce, 2)
@@ -1511,16 +1836,92 @@ local function parse_path(s)
     return result
 end
 
+local function unpack_path(node)
+    local result = {}
+
+    local function visit(n)
+        if instance_of(n, Token) then
+            table.insert(result, { op = DOT, operand = n })
+        elseif instance_of(n, UnaryNode) then
+            visit(n.operand)
+        elseif instance_of(n, BinaryNode) then
+            visit(n.lhs)
+            table.insert(result, { op = n.op, operand = n.rhs })
+        else
+            local msg = string.format("unexpected node '%s'", n)
+            assert(false, msg)
+        end
+    end
+
+    visit(node)
+    return result
+end
+
+local function to_source(node)
+    local result
+
+    if instance_of(node, Token) then
+        if node.type == WORD or node.type == STRING then
+            result = node.text
+        else
+            result = tostring(node.value)
+        end
+    else
+        local pth = unpack_path(node)
+        local parts = { pth[1].operand.text }
+
+        for i = 2, #pth do
+            local pe = pth[i]
+
+            if pe.op == DOT then
+                parts[i] = string.format('.%s', pe.operand.text)
+            elseif pe.op == LBRACK then
+                parts[i] = string.format('[%s]', to_source(pe.operand))
+            elseif pe.op == COLON then
+                local sn = pe.operand
+                local s
+                local sparts = {}
+
+                if sn.start_index ~= nil then
+                    table.insert(sparts, to_source(sn.start_index))
+                end
+                table.insert(sparts, ':')
+                if sn.stop_index ~= nil then
+                    table.insert(sparts, to_source(sn.stop_index))
+                end
+                if sn.step ~= nil then
+                    s = string.format(':%s', to_source(sn.step))
+                    table.insert(sparts, s)
+                end
+                parts[i] = string.format('[%s]', table.concat(sparts, ''))
+            else
+                local msg = string.format('Unexpected path element %s', pe.op)
+                local ce = ConfigError:new(msg, pe.operand.start)
+
+                error(ce, 2)
+            end
+        end
+        result = table.concat(parts, '')
+    end
+    return result
+end
+
 local CONFIG_METHODS = make_set(
     'new',
     'load_file',
+    'load_source',
     '_load',
     '_wrap_mapping',
     'get',
     '_evaluate',
     '_as_list',
+    '_to_map',
     '_as_dict',
-    'as_dict'
+    'as_dict',
+    '_get_from_path',
+    '_get_slice',
+    '_convert_string',
+    '_unwrap'
 )
 local CONFIG_PROPS = make_set(
     'context',
@@ -1529,7 +1930,9 @@ local CONFIG_PROPS = make_set(
     'strict_conversions',
     'include_path',
     'string_converter',
-    '_cache'
+    '_cache',
+    '_root_dir',
+    'path'
 )
 
 local Config = {
@@ -1549,7 +1952,7 @@ local Config = {
                 local mt = getmetatable(table)
                 v = mt[key]
             elseif CONFIG_PROPS[key] ~= nil then
-                v = rawget(table, key)  -- no recursion to here!
+                v = rawget(table, key) -- no recursion to here!
             else
                 v = table:get(key)
             end
@@ -1559,11 +1962,17 @@ local Config = {
         return o
     end,
 
-    load_file = function(self, path)
-        local stream = Stream:from_file(path)
+    load_file = function(self, filepath)
+        local stream = Stream:from_file(filepath)
         self:_load(stream)
-        self.path = path
-        self._root_dir = dir_name(path)
+        self.path = filepath
+        self._root_dir = dir_name(filepath)
+    end,
+
+    load_source = function(self, source)
+        local stream = Stream:from_string(source)
+        self:_load(stream)
+        self._root_dir = path.current_dir()
     end,
 
     _load = function(self, stream)
@@ -1580,10 +1989,10 @@ local Config = {
     end,
 
     _wrap_mapping = function(self, node)
-        local result = niltable({})
+        local result = {}
         local seen = self.no_duplicates and {} or nil
 
-        for i, me in ipairs(node.elements) do
+        for _, me in ipairs(node.elements) do
             local k = me.key.type == WORD and me.key.text or me.key.value
 
             if not self.no_duplicates then
@@ -1600,17 +2009,12 @@ local Config = {
                 -- print(string.format('%s -> %s', k, me.value))
             end
         end
-        if niltable.wrapped(result) == nil then
-            -- niltable optimises empty tables to nil
-            result = {}
-        end
         return result
     end,
 
     get = function(self, key, default_value)
         local ok, result
 
-        -- dbg()
         if self._cache ~= nil then
             result = self._cache[key]
         elseif not self._data then
@@ -1618,13 +2022,14 @@ local Config = {
 
             error(pe, 2)
         else
-            if niltable.exists(self._data, key) then
+            if self._data[key] then
                 result = self:_evaluate(self._data[key])
             elseif is_identifier(key) then
                 if default_value == nil then
                     local msg = string.format('Not found in configuration: %s', key)
                     local pe = ConfigError:new(msg, nil)
 
+                    -- dbg()
                     error(pe, 2)
                 end
                 result = default_value
@@ -1640,153 +2045,646 @@ local Config = {
                     error(result, 2)
                 else
                     ok, result = pcall(function()
-                        _ = self:_get_from_path(p)
+                        return self:_get_from_path(p)
                     end)
                 end
                 if not ok then
-                    local msg = string.format('Not found in configuration: %s', key)
-                    local pe = ConfigError:new(msg, nil)
-
-                    error(pe, 2)
+                    if not result.message:find('Not found in configuration') or default_value == nil then
+                        -- dbg()
+                        error(result, 2)
+                    end
+                    result = default_value
                 end
             end
+        end
+        return self:_unwrap(result)
+    end,
+
+    NODE_EVAL = {
+        [AT] = '_eval_at',
+        [DOLLAR] = '_eval_ref',
+        [PLUS] = '_eval_add',
+        [STAR] = '_eval_mult',
+        [SLASH] = '_eval_divide',
+        [MODULO] = '_eval_modulo',
+        [SLASHSLASH] = '_eval_idivide',
+        [BITOR] = '_eval_bitor',
+        [BITAND] = '_eval_bitand',
+        [BITXOR] = '_eval_bitxor',
+        [LSHIFT] = '_eval_lshift',
+        [RSHIFT] = '_eval_rshift',
+        [AND] = '_eval_logand',
+        [OR] = '_eval_logor',
+        [POWER] = '_eval_power',
+    },
+
+    _eval_ref = function(self, node)
+        if contains_key(self._refs_seen, node) then
+            local nodes = {}
+            for k, _ in pairs(self._refs_seen) do
+                table.insert(nodes, k)
+            end
+            table.sort(nodes, function(n1, n2)
+                if n1.spos.line ~= n2.spos.line then
+                    return n1.spos.line < n2.spos.line
+                end
+                return n1.spos.column < n2.spos.column
+            end)
+            local parts = {}
+            for _, n in ipairs(nodes) do
+                local s = string.format('%s %s', to_source(n), n.spos)
+                table.insert(parts, s)
+            end
+            local msg = table.concat(parts, ', ')
+            msg = string.format('Circular reference: %s', msg)
+            local ce = ConfigError:new(msg, nil)
+
+            error(ce, 2)
+        end
+        self._refs_seen[node] = true
+        local result = self:_get_from_path(node.operand)
+        return result
+    end,
+
+    _eval_add = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot add %s to %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'complex' and trhs ~= 'complex' then
+            if trhs ~= 'number' then
+                cannot()
+            end
+            rhs = complex.to(rhs)
+            trhs = 'complex'
+        elseif trhs == 'complex' and tlhs ~= 'complex' then
+            if tlhs ~= 'number' then
+                cannot()
+            end
+            lhs = complex.to(lhs)
+            tlhs = 'complex'
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs + rhs
+        elseif tlhs == 'complex' and trhs == 'complex' then
+            result = complex.add(lhs, rhs)
+        elseif tlhs == 'string' and trhs == 'string' then
+            result = lhs .. rhs
+        elseif tlhs == 'table' and trhs == 'table' then
+            if is_array(lhs) and is_array(rhs) then
+                -- lhs = self:_as_list(lhs)
+                -- rhs = self:_as_list(rhs)
+                result = concat_arrays(lhs, rhs)
+            else
+                lhs = self:_to_map(lhs)
+                rhs = self:_to_map(rhs)
+                result = merge_tables(lhs, rhs)
+            end
+        else
+            cannot()
+        end
+        -- log.debug('eval_add', inspect(node), ' -> ', inspect(result))
+        return result
+    end,
+
+    _eval_negate = function(self, node)
+        local operand = self:_evaluate(node.operand)
+        local toperand = type(operand)
+
+        local function cannot()
+            local msg = string.format('Cannot negate %s', operand)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if toperand == 'number' then
+            return -operand
+        else
+            cannot()
+        end
+    end,
+
+    _eval_subtract = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot subtract %s from %s', rhs, lhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'complex' and trhs ~= 'complex' then
+            if trhs ~= 'number' then
+                cannot()
+            end
+            rhs = complex.to(rhs)
+            trhs = 'complex'
+        elseif trhs == 'complex' and tlhs ~= 'complex' then
+            if tlhs ~= 'number' then
+                cannot()
+            end
+            lhs = complex.to(lhs)
+            tlhs = 'complex'
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs - rhs
+        elseif tlhs == 'complex' and trhs == 'complex' then
+            result = complex.sub(lhs, rhs)
+        elseif tlhs == 'table' and trhs == 'table' then
+            lhs = self:_to_map(lhs)
+            rhs = self:_to_map(rhs)
+            result = subtract_tables(lhs, rhs)
+        else
+            cannot()
         end
         return result
     end,
 
-    NODE_EVAL = {
-        [AT] = '_eval_at'
-    },
-
-    _eval_at = function(self, node)
+    _eval_mult = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
         local result
-        local fn = self:_evaluate(node.operand)
-        local loc = node.operand.spos
-        local t = type(fn)
 
-        if t ~= 'string' then
-            local msg = string.format('@ operand must be a string, but is %s', t)
+        local function cannot()
+            local msg = string.format('Cannot multiply %s and %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
 
-            error(msg, 2)
+            error(ce, 2)
         end
 
-        local found = false
-        local p = path.new(fn)
-        local fp
-
-        if p:is_absolute() and p:exists() then
-            fp = fn
-            found = true
-        else
-            fp = self._root_dir .. os_sep .. fn
-            if path.new(fp):exists() then
-                found = true
-            else
-                for _, d in ipairs(self.include_path) do
-                    fp = d .. os_sep .. fn
-                    if path.new(fp):exists() then
-                        found = true
-                        break
-                    end
-                end
+        if tlhs == 'complex' and trhs ~= 'complex' then
+            if trhs ~= 'number' then
+                cannot()
             end
+            rhs = complex.to(rhs)
+            trhs = 'complex'
+        elseif trhs == 'complex' and tlhs ~= 'complex' then
+            if tlhs ~= 'number' then
+                cannot()
+            end
+            lhs = complex.to(lhs)
+            tlhs = 'complex'
         end
-        if not found then
-            local msg = string.format('Unable to locate %s', fn)
-            local ce = ConfigError:new(msg, loc)
 
-            error(ce, 2)
-        end
-        if self.path and path.new(self.path):exists() and self.path == fp then
-            local msg = string.format('Configuration cannot include itself: %s',fn)
-            local ce = ConfigError:new(msg, loc)
-
-            error(ce, 2)
-        end
-        local stream = Stream:from_file(fp)
-        local p = Parser:new(stream)
-        local node = p:container()
-
-        if instance_of(node, ListNode) then
-            result = node.elements
-        elseif not instance_of(node, MappingNode) then
-            local msg = string.format('Unexpected container type: %s', type(node))
-            local ce = ConfigError:new(msg, loc)
-
-            error(ce, 2)
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs * rhs
+        elseif tlhs == 'complex' and trhs == 'complex' then
+            result = complex.mul(lhs, rhs)
         else
-            local cfg = self:new()
-            setmetatable(cfg, getmetatable(self))
-            cfg.no_duplicates = self.no_duplicates
-            cfg.strict_conversions = self.strict_conversions
-            cfg.context = self.context
-            cfg.path = fp
-            cfg._root_dir = dir_name(fp)
-            cfg.parent = self
-            cfg._data = self:_wrap_mapping(node)
-            result = cfg
+            cannot()
         end
         return result
-     end,
+    end,
+
+    _eval_divide = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot divide %s by %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'complex' and trhs ~= 'complex' then
+            if trhs ~= 'number' then
+                cannot()
+            end
+            rhs = complex.to(rhs)
+            trhs = 'complex'
+        elseif trhs == 'complex' and tlhs ~= 'complex' then
+            if tlhs ~= 'number' then
+                cannot()
+            end
+            lhs = complex.to(lhs)
+            tlhs = 'complex'
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs / rhs
+        elseif tlhs == 'complex' and trhs == 'complex' then
+            result = complex.div(lhs, rhs)
+        else
+            cannot()
+        end
+        return result
+    end,
+
+    _eval_modulo = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot compute %s modulo %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs % rhs
+        else
+            cannot()
+        end
+        return result
+    end,
+
+    _eval_idivide = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot integer-divide %s by %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs // rhs
+        else
+            cannot()
+        end
+        return result
+    end,
+
+    _eval_power = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot raise %s to the power of %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'complex' and trhs ~= 'complex' then
+            if trhs ~= 'number' then
+                cannot()
+            end
+            rhs = complex.to(rhs)
+            trhs = 'complex'
+        elseif trhs == 'complex' and tlhs ~= 'complex' then
+            if tlhs ~= 'number' then
+                cannot()
+            end
+            lhs = complex.to(lhs)
+            tlhs = 'complex'
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs ^ rhs
+        elseif tlhs == 'complex' and trhs == 'complex' then
+            result = complex.pow(lhs, rhs)
+        else
+            cannot()
+        end
+        return result
+    end,
+
+    _eval_bitor = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot bitwise-or %s and %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs | rhs
+        elseif tlhs == 'table' and trhs == 'table' then
+            lhs = self:_to_map(lhs)
+            rhs = self:_to_map(rhs)
+            result = merge_tables(lhs, rhs)
+        else
+            cannot()
+        end
+        -- log.debug('eval_bitor', inspect(node), ' -> ', inspect(result))
+        return result
+    end,
+
+    _eval_bitand = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot bitwise-and %s and %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs & rhs
+        else
+            cannot()
+        end
+        -- log.debug('eval_bitand', inspect(node), ' -> ', inspect(result))
+        return result
+    end,
+
+    _eval_bitxor = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot bitwise-xor %s and %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs ~ rhs
+        else
+            cannot()
+        end
+        return result
+    end,
+
+    _eval_lshift = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = get_type(lhs)
+        local trhs = get_type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot left-shift %s with %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs << rhs
+        else
+            cannot()
+        end
+        return result
+    end,
+
+    _eval_rshift = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+        local rhs = self:_evaluate(node.rhs)
+        local tlhs = type(lhs)
+        local trhs = type(rhs)
+        local result
+
+        local function cannot()
+            local msg = string.format('Cannot right-shift %s with %s', lhs, rhs)
+            local ce = ConfigError:new(msg, node.spos)
+
+            error(ce, 2)
+        end
+
+        if tlhs == 'number' and trhs == 'number' then
+            result = lhs >> rhs
+        else
+            cannot()
+        end
+        return result
+    end,
+
+    _eval_logand = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+
+        if not lhs then
+            return lhs
+        end
+
+        return self:_evaluate(node.rhs)
+    end,
+
+    _eval_logor = function(self, node)
+        local lhs = self:_evaluate(node.lhs)
+
+        if lhs then
+            return lhs
+        end
+
+        return self:_evaluate(node.rhs)
+    end,
+
+    _convert_string = function(self, s, loc)
+        local result = self.string_converter(s, self)
+
+        if self.strict_conversions and result == s then
+            local msg = string.format("Unable to convert string '%s'", s)
+            local ce = ConfigError:new(msg, loc)
+
+            error(ce, 2)
+        end
+        return result
+    end,
 
     _evaluate = function(self, node)
+        local tnode = type(node)
         local result
-        local wm = self._wrap_mapping
-        if instance_of(node, Token) then
+
+        -- log.debug('_evaluate input', inspect(node))
+        if tnode == 'string' or tnode == 'number' then
+            result = node
+        elseif instance_of(node, Token) then
             if node.type == WORD then
+                if not contains_key(self.context, node.text) then
+                    local msg = string.format("Unknown variable '%s'", node.text)
+                    local ce = ConfigError:new(msg, node.spos)
+
+                    -- if node.text == 'foo_ref' or node.text == 'defs' then
+                    --     dbg()
+                    -- end
+                    error(ce, 2)
+                end
+                result = self.context[node.text]
             elseif node.type == BACKTICK then
+                result = self:_convert_string(node.value, node.spos)
             else
                 result = node.value
             end
         elseif instance_of(node, MappingNode) then
-            -- dbg()
-            result = wm(self, node)
+            result = self:_wrap_mapping(node)
         elseif instance_of(node, ListNode) then
-            -- dbg()
             result = node.elements
         else
             local mt = getmetatable(self)
-            local func
+            local func, k, msg
 
-            local u = instance_of(node, UnaryNode)
-            if u then
-                local k = mt.NODE_EVAL[node.op]
-                assert(k, "method found")
-                func = mt[k]
-                result = func(self, node)
+            if node.op == MINUS then
+                if instance_of(node, UnaryNode) then
+                    k = '_eval_negate'
+                else
+                    k = '_eval_subtract'
+                end
             else
-                -- dbg()
+                k = mt.NODE_EVAL[node.op]
+                if k == nil then
+                    msg = string.format('Method name for "%s" not found', node.op)
+                    assert(false, msg)
+                end
             end
+            func = mt[k]
+            if not func then
+                msg = string.format('Method for "%s" not found', k)
+                assert(false, msg)
+            end
+            result = func(self, node)
         end
+        -- log.debug('_evaluate output', inspect(result))
         return result
+    end,
+
+    _to_map = function(self, t)
+        if is_node_map(t) then
+            return self:_as_dict(t)
+        elseif is_mapping(t) then
+            return t
+        else
+            local ce = ConfigError:new('Unexpected map argument %s', t)
+
+            error(ce, 2)
+        end
     end,
 
     _as_dict = function(self, node)
         local result = {}
-
         local evaluator = self._evaluate
         local wm = self._wrap_mapping
         local ad = self._as_dict
         local al = self._as_list
 
-        for k, v in niltable.expairs(node) do
-            local rv = evaluator(self, v)
+        -- log.debug('as_dict start', inspect(node))
+        for k, v in pairs(node) do
+            local rv
+            local terminal = false
 
-            if is_niltable(rv) then
-                rv = niltable.wrapped(rv)
-            end
-            if instance_of(rv, Token) then
-                rv = rv.value
-            elseif instance_of(rv, MappingNode) then
-                local m = wm(self, rv)
-
-                rv = ad(self, m)
-            elseif instance_of(rv, ListNode) then
-                rv = al(self, rv.elements)
+            if is_terminal_value(v) then
+                rv = v
+                terminal = true
+            elseif is_node_list(v) then
+                rv = al(self, v)
+            elseif is_node_map(v) then
+                rv = ad(self, v)
+            elseif is_ast_node(v) then
+                rv = evaluator(self, v)
             else
-                -- dbg()
+                rv = v -- could be plain mapping or array
+            end
+
+            if not terminal then
+                if instance_of(rv, Token) then
+                    rv = rv.value
+                elseif instance_of(rv, MappingNode) then
+                    local m = wm(self, rv)
+
+                    rv = ad(self, m)
+                elseif instance_of(rv, ListNode) then
+                    rv = al(self, rv.elements)
+                -- elseif is_ast_node(v) then
+                --     rv = evaluator(self, v)
+                elseif is_mapping(rv) then
+                    rv = ad(self, rv)
+                elseif is_array(rv) then
+                    rv = al(self, rv)
+                elseif not is_terminal_value(rv) then
+                    not_implemented()
+                end
             end
             result[k] = rv
+        end
+        -- log.debug('as_dict end', inspect(result))
+        return result
+    end,
+
+    _as_list = function(self, node)
+        local result = {}
+        local evaluator = self._evaluate
+        local wm = self._wrap_mapping
+        local ad = self._as_dict
+        local al = self._as_list
+
+        for _, v in ipairs(node) do
+            local rv
+            local terminal = false
+
+            if is_terminal_value(v) then
+                rv = v
+                terminal = true
+            elseif is_node_list(v) then
+                rv = al(self, v)
+            elseif is_node_map(v) then
+                rv = ad(self, v)
+            elseif is_ast_node(v) then
+                rv = evaluator(self, v)
+            else
+                rv = v -- could be plain mapping or array
+            end
+
+            if not terminal then
+                if instance_of(rv, Token) then
+                    rv = rv.value
+                elseif instance_of(rv, MappingNode) then
+                    local m = wm(self, rv)
+
+                    rv = ad(self, m)
+                elseif instance_of(rv, ListNode) then
+                    rv = al(self, rv.elements)
+                -- elseif is_ast_node(v) then
+                --     rv = evaluator(self, v)
+                elseif is_mapping(rv) then
+                    rv = ad(self, rv)
+                elseif is_array(rv) then
+                    rv = al(self, rv)
+                elseif not is_terminal_value(rv) then
+                    not_implemented()
+                end
+            end
+            table.insert(result, rv)
         end
         return result
     end,
@@ -1799,10 +2697,274 @@ local Config = {
         end
         return self:_as_dict(self._data)
     end,
+
+    _get_slice = function(self, container, sn)
+        local start, stop, step
+        local result = {}
+        local size = #container
+
+        if sn.step == nil then
+            step = 1
+        else
+            step = self:_evaluate(sn.step)
+            if type(step) ~= 'number' then
+                local msg = string.format('Step is not an integer, but %s (%s)', step, type(step))
+                local ce = ConfigError:new(msg, sn.spos)
+
+                error(ce, 2)
+            end
+            if step == 0 then
+                local ce = ConfigError:new('Step cannot be zero', sn.spos)
+
+                error(ce, 2)
+            end
+        end
+        if sn.start_index == nil then
+            start = 0
+        else
+            start = self:_evaluate(sn.start_index)
+            if type(start) ~= 'number' then
+                local msg = string.format('Start is not an integer, but %s (%s)', start, type(start))
+                local ce = ConfigError:new(msg, sn.spos)
+
+                error(ce, 2)
+            end
+            if start < 0 then
+                if start >= -size then
+                    start = start + size
+                else
+                    start = 0
+                end
+            elseif start >= size then
+                start = size - 1
+            end
+        end
+        if sn.stop_index == nil then
+            stop = size - 1
+        else
+            stop = self:_evaluate(sn.stop_index)
+            if type(stop) ~= 'number' then
+                local msg = string.format('Stop is not an integer, but %s (%s)', stop, type(stop))
+                local ce = ConfigError:new(msg, sn.spos)
+
+                error(ce, 2)
+            end
+            if stop < 0 then
+                if stop >= -size then
+                    stop = stop + size
+                else
+                    stop = 0
+                end
+            end
+            if stop > size then
+                stop = size
+            end
+            if step < 0 then
+                stop = stop + 1
+            else
+                stop = stop - 1
+            end
+        end
+        if step < 0 and start < stop then
+            local tmp = start
+
+            start = stop
+            stop = tmp
+        end
+        local i = start
+        local not_done
+        if step > 0 then
+            not_done = (i <= stop)
+        else
+            not_done = (i >= stop)
+        end
+        while not_done do
+            table.insert(result, container[i + 1]) -- Lua has 1-based indices
+            i = i + step
+            if step > 0 then
+                not_done = (i <= stop)
+            else
+                not_done = (i >= stop)
+            end
+        end
+        return result
+    end,
+
+    _get_from_path = function(self, node)
+        local elements = unpack_path(node)
+        local current = self
+        local config = self
+
+        local not_found = function(k, loc)
+            local msg = string.format('Not found in configuration: %s', k)
+            local ce = ConfigError:new(msg, loc)
+
+            error(ce, 2)
+        end
+
+        for _, pe in ipairs(elements) do
+            local loc = pe.operand.spos
+
+            if pe.op == DOT then
+                local t = pe.operand
+                assert(instance_of(t, Token), 'Token expected')
+                assert(t.type == WORD, 'Word expected')
+                local k = t.text
+                local d
+
+                if contains_key(current, '_data') then
+                    d = current._data
+                else
+                    d = current
+                end
+                if not contains_key(d, k) then
+                    not_found(k, loc)
+                end
+                current = d[k]
+            elseif pe.op == LBRACK then
+                if not is_array(current) then
+                    local msg = 'Invalid container for numeric index'
+                    local ce = ConfigError:new(msg, loc)
+
+                    error(ce, 2)
+                end
+                local idx = config:_evaluate(pe.operand)
+                if type(idx) ~= 'number' then
+                    local msg = string.format('Invalid index %s', idx)
+                    local ce = ConfigError:new(msg, loc)
+
+                    error(ce, 2)
+                end
+                local size = #current
+                local oidx = idx
+                if idx < 0 then
+                    idx = idx + size
+                end
+                if idx < 0 or idx >= size then
+                    local msg = string.format('Index out of range: is %s, must be between 0 and %s', oidx, size - 1)
+                    local ce = ConfigError:new(msg, loc)
+
+                    error(ce, 2)
+                end
+                current = current[idx + 1] -- Lua has 1-based indices
+            elseif pe.op == COLON then
+                if not is_array(current) then
+                    local msg = 'Invalid container for slice index'
+                    local ce = ConfigError:new(msg, loc)
+
+                    error(ce, 2)
+                end
+                current = self:_get_slice(current, pe.operand)
+            else
+                -- handle unexpected operation in path
+                local msg = string.format('Invalid path element: %s', pe.op)
+                local ce = ConfigError:new(msg, loc)
+
+                error(ce, 2)
+            end
+            if is_ast_node(current) then
+                current = config:_evaluate(current)
+            end
+            if type(current) == 'table' and contains_key(current, '_data') then
+                config = current
+            end
+        end
+        self._refs_seen = {}
+        return config:_unwrap(current)
+    end,
 }
 
+-- Following need to be outside the above definition, because self-referential
+
+Config._eval_at = function(self, node)
+    local result
+    local fn = self:_evaluate(node.operand)
+    local loc = node.operand.spos
+    local t = type(fn)
+
+    if t ~= 'string' then
+        local msg = string.format('@ operand must be a string, but is %s (%s)', fn, t)
+        local ce = ConfigError:new(msg, loc)
+        error(ce, 2)
+    end
+
+    local found = false
+    local p = path.new(fn)
+    local fp
+
+    if p:is_absolute() and p:exists() then
+        fp = fn
+        found = true
+    else
+        fp = self._root_dir .. os_sep .. fn
+        if path.new(fp):exists() then
+            found = true
+        else
+            for _, d in ipairs(self.include_path) do
+                fp = d .. os_sep .. fn
+                if path.new(fp):exists() then
+                    found = true
+                    break
+                end
+            end
+        end
+    end
+    if not found then
+        local msg = string.format('Unable to locate %s', fn)
+        local ce = ConfigError:new(msg, loc)
+
+        error(ce, 2)
+    end
+    if self.path and path.new(self.path):exists() and self.path == fp then
+        local msg = string.format('Configuration cannot include itself: %s', fn)
+        local ce = ConfigError:new(msg, loc)
+
+        error(ce, 2)
+    end
+    local stream = Stream:from_file(fp)
+    local parser = Parser:new(stream)
+    local parsed_node = parser:container()
+
+    if instance_of(parsed_node, ListNode) then
+        result = parsed_node.elements
+    elseif not instance_of(parsed_node, MappingNode) then
+        local msg = string.format('Unexpected container type: %s', type(node))
+        local ce = ConfigError:new(msg, loc)
+
+        error(ce, 2)
+    else
+        local cfg = Config:new()
+        -- setmetatable(cfg, getmetatable(self))
+        cfg.no_duplicates = self.no_duplicates
+        cfg.strict_conversions = self.strict_conversions
+        cfg.context = self.context
+        cfg.path = fp
+        cfg.include_path = self.include_path
+        cfg._root_dir = dir_name(fp)
+        cfg.parent = self
+        cfg._data = self:_wrap_mapping(parsed_node)
+        result = cfg
+    end
+    return result
+end
+
+Config._unwrap = function(self, v)
+    local result
+
+    if is_terminal_value(v) or instance_of(v, Config) then
+        result = v
+    elseif instance_of(v, MappingNode) or is_mapping(v) then
+        result = self:_as_dict(v)
+    elseif instance_of(v, ListNode) or is_node_list(v) then
+        result = self:_as_list(v)
+    else
+        result = v
+    end
+    return result
+end
+
 -- Remove the added token types
-for k, v in pairs(TokenType) do
+for k, _ in pairs(TokenType) do
     _G[k] = nil
 end
 
@@ -1819,8 +2981,11 @@ return {
     Parser = Parser,
     ConfigError = ConfigError,
     Config = Config,
+    Date = Date,
     is_identifier = is_identifier,
     instance_of = instance_of,
     index_of = index_of,
-    parse_path = parse_path
+    parse_path = parse_path,
+    to_source = to_source,
+    NIL = NIL,
 }

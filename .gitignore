@@ -2,3 +2,12 @@
 debugger.lua
 luaunit.lua
 inspect.lua
+luacov.lua
+luacov
+lfs.so
+log.lua
+profile.lua
+test.log
+profile.txt
+*.out
+*.html

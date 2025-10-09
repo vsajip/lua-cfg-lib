@@ -344,6 +344,14 @@ function Path:normalize()
   return result
 end
 
+function Path.current_dir()
+    return lfs.currentdir()
+end
+
+function Path.list_dir(p)
+    return lfs.dir(p)
+end
+
 ---**on windows** clears the `drive_letter`. You may want `set_drive_letter()` instead
 ---@return Path
 function Path:to_absolute()
