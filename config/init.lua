@@ -35,6 +35,23 @@ local Date = {
     new = function(self, o)
         self.__index = self
         self.__tag__ = 'Date'
+        self.__tostring = function(self)
+            local fmt = '%4d-%02d-%02dT%02d:%02d:'
+            if math.ceil(self.second) == self.second then
+                fmt = fmt .. '%02d'
+            else
+                fmt = fmt .. '%08.6f'
+            end
+            local result = string.format(fmt,
+                self.year,
+                self.month,
+                self.day,
+                self.hour,
+                self.minute,
+                self.second
+            )
+            return result
+        end
         setmetatable(o, self)
         return o
     end,
