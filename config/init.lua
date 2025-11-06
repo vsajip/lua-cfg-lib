@@ -1908,7 +1908,9 @@ end
 
 local CONFIG_METHODS = make_set(
     'new',
+    'from_file',
     'load_file',
+    'from_source',
     'load_source',
     '_load',
     '_wrap_mapping',
@@ -1969,10 +1971,24 @@ local Config = {
         self._root_dir = dir_name(filepath)
     end,
 
+    from_file = function(self, filepath)
+        local result = self:new()
+
+        result:load_file(filepath)
+        return result
+    end,
+
     load_source = function(self, source)
         local stream = Stream:from_string(source)
         self:_load(stream)
         self._root_dir = path.current_dir()
+    end,
+
+    from_source = function(self, source)
+        local result = self:new()
+
+        result:load_source(source)
+        return result
     end,
 
     _load = function(self, stream)

@@ -1443,10 +1443,9 @@ TestConfig = {
 
     test_duplicates = function()
         local p = data_file_path('derived', 'dupes.cfg')
-        local cfg = Config:new()
 
         local ok, err = pcall(function()
-            cfg:load_file(p)
+            return Config:from_file(p)
         end)
         lu.assertFalse(ok)
         lu.assertEquals(err.pos.line, 4)
@@ -1480,10 +1479,9 @@ TestConfig = {
 
     test_expressions = function()
         local p = data_file_path('derived', 'test.cfg')
-        local cfg = Config:new()
         local expected
+        local cfg = Config:from_file(p)
 
-        cfg:load_file(p)
         expected = {
             a = 'b',
             c = 'd',
@@ -1717,9 +1715,8 @@ TestConfig = {
 
     test_paths_across_includes = function()
         local p = data_file_path('base', 'main.cfg')
-        local cfg = Config:new()
+        local cfg = Config:from_file(p)
 
-        cfg:load_file(p)
         -- using assertEquals with boolean values to avoid coercion
         lu.assertEquals(cfg['logging.appenders.file.filename'], 'run/server.log')
         lu.assertEquals(cfg['logging.appenders.file.append'], true)
@@ -1750,9 +1747,8 @@ TestConfig = {
 
     test_circular_references = function()
         local p = data_file_path('derived', 'test.cfg')
-        local cfg = Config:new()
+        local cfg = Config:from_file(p)
 
-        cfg:load_file(p)
         local cases = {
             { 'circ_list[1]', 'Circular reference: circ_list[1] (42, 5)' },
             { 'circ_map.a', 'Circular reference: circ_map.b (47, 8), circ_map.c (48, 8), circ_map.a (49, 8)' },
@@ -1771,10 +1767,8 @@ TestConfig = {
 
     test_slices_and_indices = function()
         local p = data_file_path('derived', 'test.cfg')
-        local cfg = Config:new()
+        local cfg = Config:from_file(p)
         local the_list = { 'a', 'b', 'c', 'd', 'e', 'f', 'g' }
-
-        cfg:load_file(p)
 
         -- slices
 
@@ -1837,11 +1831,10 @@ TestConfig = {
         local p2 = path.combine(path.current_dir(), p1):str()
 
         for _, p in ipairs({ p1, p2 }) do
-            local cfg = Config:new()
             p = p.gsub(p, '\\', '\\\\')
             local s = string.format("test: @'%s'", p)
+            local cfg = Config:from_source(s)
 
-            cfg:load_source(s)
             lu.assertEquals(cfg['test.computed6'], 2)
         end
     end,
@@ -1851,9 +1844,8 @@ TestConfig = {
         local derived = data_file_path('derived')
         local another = data_file_path('another')
         local fn = path.combine(base, 'top.cfg'):str()
-        local cfg = Config:new()
+        local cfg = Config:from_file(fn)
 
-        cfg:load_file(fn)
         cfg.include_path = { derived, another }
         lu.assertEquals(cfg['level1.level2.final'], 42)
     end,
