@@ -18,9 +18,9 @@ dependencies = {
 build = {
     type = 'builtin',
     modules = {
-        config = 'config.lua',
-        charcats = 'charcats.lua',
-        complex = 'complex.lua',
-        path = 'path.lua'
+        config = 'config/init.lua',
+        ['config.charcats'] = 'config/charcats.lua',
+        ['config.complex'] = 'config/complex.lua',
+        ['config.path'] = 'config/path.lua'
     }
 }

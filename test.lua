@@ -9,12 +9,12 @@
 
 local lu = require('luaunit')
 local config = require('config')
-local complex = require('complex')
+local complex = require('config.complex')
 -- local lfs = require('lfs')
 -- local inspect = require('inspect')
 -- local dbg = require('debugger')
 -- local log = require('log')
-local path = require('path')
+local path = require('config.path')
 
 local NIL = config.NIL
 local Location = config.Location

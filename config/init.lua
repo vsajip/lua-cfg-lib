@@ -6,9 +6,9 @@
 -- @see https://docs.red-dove.com/cfg/
 --
 
-local charcats = require('charcats')
-local complex = require('complex')
-local path = require('path')
+local charcats = require('config.charcats')
+local complex = require('config.complex')
+local path = require('config.path')
 -- local inspect = require('inspect')
 -- local log = require('log')
 -- local dbg = require('debugger')
