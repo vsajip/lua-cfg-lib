@@ -1,7 +1,7 @@
 package = 'lua-cfg-lib'
-version = '0.0.1'
+version = '0.1-0'
 source = {
-    url = '...' -- We don't have one yet
+    url = 'https://github.com/vsajip/lua-cfg-lib/'
 }
 description = {
     summary = 'A library for working with the CFG configuration format.',
@@ -16,12 +16,11 @@ dependencies = {
     'luafilesystem >= 1.8.0'
 }
 build = {
-    type = 'none',
-    install = {
-        lua = {
-            config = 'config.lua',
-            charcats = 'charcats.lua',
-            complex = 'complex.lua',
-        }
+    type = 'builtin',
+    modules = {
+        config = 'config.lua',
+        charcats = 'charcats.lua',
+        complex = 'complex.lua',
+        path = 'path.lua'
     }
 }
