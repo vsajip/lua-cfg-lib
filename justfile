@@ -3,11 +3,7 @@ test *FLAGS:
     lua test.lua {{FLAGS}}
 
 style:
-    stylua config.lua test.lua
+    stylua config/init.lua test.lua
 
 lint:
-    luacheck config.lua test.lua
-
-back:
-    stg refresh
-    stg show >~/Sync/lua-stg-parser.diff
+    luacheck config/init.lua test.lua
