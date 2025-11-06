@@ -1,5 +1,5 @@
-package = 'lua-cfg-lib'
-version = '0.1-0'
+package = 'cfg-lib'
+version = '0.1.0-1'
 source = {
     url = 'https://github.com/vsajip/lua-cfg-lib/'
 }
