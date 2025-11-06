@@ -13,7 +13,7 @@ local complex = require('complex')
 -- local lfs = require('lfs')
 -- local inspect = require('inspect')
 -- local dbg = require('debugger')
-local log = require('log')
+-- local log = require('log')
 local path = require('path')
 
 local NIL = config.NIL
@@ -45,8 +45,8 @@ else
     platform = 'posix'
 end
 
-log.level = 'warn'
-log.outfile = 'test.log'
+-- log.level = 'warn'
+-- log.outfile = 'test.log'
 
 -- Add the token types to the globals so that we don't need to qualify them
 -- in this file. We remove them at the end
