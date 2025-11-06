@@ -38,8 +38,9 @@ local to_source = config.to_source
 local SN = config.SliceNode
 
 local platform
+local os_sep = path.get_main_separator()
 
-if path.get_main_separator() == '\\' then
+if os_sep == '\\' then
     platform = 'windows'
 else
     platform = 'posix'
@@ -314,7 +315,7 @@ local function data_file_path(...)
     for i = 1, parts.n do
         table.insert(p, parts[i])
     end
-    return table.concat(p, '/') -- works on Windows too
+    return table.concat(p, os_sep)
 end
 
 TestStream = {
@@ -1837,7 +1838,7 @@ TestConfig = {
 
         for _, p in ipairs({ p1, p2 }) do
             local cfg = Config:new()
-            p = p.gsub(p, '\\', '/')
+            p = p.gsub(p, '\\', '\\\\')
             local s = string.format("test: @'%s'", p)
 
             cfg:load_source(s)
