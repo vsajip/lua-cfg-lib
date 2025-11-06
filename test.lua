@@ -241,27 +241,27 @@ end
 
 local function W(s, sl, sc)
     local ec = sc + utf8.len(s) - 1
-    return make_token(WORD, s, nil, sl, sc, sl, ec)
+    return make_token(TokenType.WORD, s, nil, sl, sc, sl, ec)
 end
 
 local function N(s, sl, sc)
     local ec = sc + utf8.len(s) - 1
-    return make_token(INTEGER, s, tonumber(s), sl, sc, sl, ec)
+    return make_token(TokenType.INTEGER, s, tonumber(s), sl, sc, sl, ec)
 end
 
 local function F(s, sl, sc)
     local ec = sc + utf8.len(s) - 1
-    return make_token(FLOAT, s, tonumber(s), sl, sc, sl, ec)
+    return make_token(TokenType.FLOAT, s, tonumber(s), sl, sc, sl, ec)
 end
 
 local function S(s, t, sl, sc)
     local ec = sc + utf8.len(s) - 1
-    return make_token(STRING, s, t, sl, sc, sl, ec)
+    return make_token(TokenType.STRING, s, t, sl, sc, sl, ec)
 end
 
 local function T(t, s, v, sl, sc, el, ec)
     if sl then
-        if t == NEWLINE then
+        if t == TokenType.NEWLINE then
             el = sl + 1
             ec = 0
         else
@@ -357,7 +357,7 @@ local function collect_tokens(tokenizer)
     local result = {}
     while true do
         local t = tokenizer:get_token()
-        if t.type == EOF then
+        if t.type == TokenType.EOF then
             break
         else
             table.insert(result, t)
@@ -382,7 +382,7 @@ TestTokenizer = {
         local c = tokenizer:get_char()
         lu.assertIsNil(c)
         local t = tokenizer:get_token()
-        lu.assertEquals(t.type, EOF)
+        lu.assertEquals(t.type, TokenType.EOF)
         lu.assertEquals(t.text, '')
         lu.assertIsNil(t.value)
     end,
@@ -396,10 +396,10 @@ TestTokenizer = {
         for _, c in ipairs(cases) do
             local tokenizer = make_tokenizer(c)
             local t = tokenizer:get_token()
-            lu.assertEquals(t.type, NEWLINE)
+            lu.assertEquals(t.type, TokenType.NEWLINE)
             lu.assertEquals(t.text, trim(c))
             t = tokenizer:get_token()
-            lu.assertEquals(t.type, EOF)
+            lu.assertEquals(t.type, TokenType.EOF)
         end
     end,
 
@@ -421,10 +421,10 @@ TestTokenizer = {
             local tokenizer = make_tokenizer(c)
             local t = tokenizer:get_token()
             -- printf('%d: %s', i, t.text)
-            lu.assertEquals(t.type, WORD)
+            lu.assertEquals(t.type, TokenType.WORD)
             lu.assertEquals(t.text, c)
             t = tokenizer:get_token()
-            lu.assertEquals(t.type, EOF)
+            lu.assertEquals(t.type, TokenType.EOF)
         end
     end,
 
@@ -432,7 +432,7 @@ TestTokenizer = {
         local keywords = 'true false null'
         local tokenizer = make_tokenizer(keywords)
         local tokens = collect_tokens(tokenizer)
-        local types = { TRUE, FALSE, NONE }
+        local types = { TokenType.TRUE, TokenType.FALSE, TokenType.NONE }
         local texts = { 'true', 'false', 'null' }
         local values = { true, false, NIL }
         local actuals = map(tokens, attrgetter('type'))
@@ -445,7 +445,7 @@ TestTokenizer = {
         tokenizer = make_tokenizer(keywords)
         tokens = collect_tokens(tokenizer)
         texts = { 'is', 'in', 'not', 'and', 'or' }
-        types = { IS, IN, NOT, AND, OR }
+        types = { TokenType.IS, TokenType.IN, TokenType.NOT, TokenType.AND, TokenType.OR }
         for i, t in ipairs(tokens) do
             lu.assertEquals(t.type, types[i])
             lu.assertEquals(t.text, texts[i])
@@ -464,11 +464,11 @@ TestTokenizer = {
             local s, v = table.unpack(c)
             local tokenizer = make_tokenizer(s)
             local t = tokenizer:get_token()
-            lu.assertEquals(t.type, INTEGER)
+            lu.assertEquals(t.type, TokenType.INTEGER)
             lu.assertEquals(t.text, s)
             lu.assertEquals(t.value, v)
             t = tokenizer:get_token()
-            lu.assertEquals(t.type, EOF)
+            lu.assertEquals(t.type, TokenType.EOF)
         end
     end,
 
@@ -486,11 +486,11 @@ TestTokenizer = {
             local s, v = table.unpack(c)
             local tokenizer = make_tokenizer(s)
             local t = tokenizer:get_token()
-            lu.assertEquals(t.type, FLOAT)
+            lu.assertEquals(t.type, TokenType.FLOAT)
             lu.assertEquals(t.text, s)
             lu.assertEquals(t.value, v)
             t = tokenizer:get_token()
-            lu.assertEquals(t.type, EOF)
+            lu.assertEquals(t.type, TokenType.EOF)
         end
     end,
 
@@ -502,11 +502,11 @@ TestTokenizer = {
             local s, v = table.unpack(c)
             local tokenizer = make_tokenizer(s)
             local t = tokenizer:get_token()
-            lu.assertEquals(t.type, COMPLEX)
+            lu.assertEquals(t.type, TokenType.COMPLEX)
             lu.assertEquals(t.text, s)
             lu.assertEquals(t.value, v)
             t = tokenizer:get_token()
-            lu.assertEquals(t.type, EOF)
+            lu.assertEquals(t.type, TokenType.EOF)
         end
     end,
 
@@ -525,11 +525,11 @@ TestTokenizer = {
             local s, v = table.unpack(c)
             local tokenizer = make_tokenizer(s)
             local t = tokenizer:get_token()
-            lu.assertEquals(t.type, STRING)
+            lu.assertEquals(t.type, TokenType.STRING)
             lu.assertEquals(t.text, s)
             lu.assertEquals(t.value, v)
             t = tokenizer:get_token()
-            lu.assertEquals(t.type, EOF)
+            lu.assertEquals(t.type, TokenType.EOF)
         end
     end,
 
@@ -544,13 +544,13 @@ TestTokenizer = {
             local s, sp, ep = table.unpack(c)
             local tokenizer = make_tokenizer(s)
             local t = tokenizer:get_token()
-            lu.assertEquals(t.type, STRING)
+            lu.assertEquals(t.type, TokenType.STRING)
             lu.assertEquals(t.text, s)
             lu.assertEquals(t.value, '')
             lu.assertEquals(t.spos.column, sp)
             lu.assertEquals(t.epos.column, ep)
             t = tokenizer:get_token()
-            lu.assertEquals(t.type, EOF)
+            lu.assertEquals(t.type, TokenType.EOF)
         end
     end,
 
@@ -580,7 +580,7 @@ TestTokenizer = {
             local t = tokenizer:get_token()
 
             -- printf('%d: %s', i, s)
-            lu.assertEquals(t.type, STRING)
+            lu.assertEquals(t.type, TokenType.STRING)
             lu.assertEquals(t.text, s)
             lu.assertEquals(t.value, v)
         end
@@ -644,40 +644,40 @@ TestTokenizer = {
         local tokenizer = make_tokenizer(puncts)
         local tokens = collect_tokens(tokenizer)
         local types = {
-            LT,
-            GT,
-            LCURLY,
-            RCURLY,
-            LBRACK,
-            RBRACK,
-            LPAREN,
-            RPAREN,
-            PLUS,
-            MINUS,
-            STAR,
-            SLASH,
-            POWER,
-            SLASHSLASH,
-            MODULO,
-            DOT,
-            LE,
-            ALT_NEQ,
-            LSHIFT,
-            GE,
-            RSHIFT,
-            EQ,
-            NEQ,
-            NOT,
-            COMMA,
-            COLON,
-            AT,
-            TILDE,
-            BITAND,
-            BITOR,
-            BITXOR,
-            DOLLAR,
-            AND,
-            OR,
+            TokenType.LT,
+            TokenType.GT,
+            TokenType.LCURLY,
+            TokenType.RCURLY,
+            TokenType.LBRACK,
+            TokenType.RBRACK,
+            TokenType.LPAREN,
+            TokenType.RPAREN,
+            TokenType.PLUS,
+            TokenType.MINUS,
+            TokenType.STAR,
+            TokenType.SLASH,
+            TokenType.POWER,
+            TokenType.SLASHSLASH,
+            TokenType.MODULO,
+            TokenType.DOT,
+            TokenType.LE,
+            TokenType.ALT_NEQ,
+            TokenType.LSHIFT,
+            TokenType.GE,
+            TokenType.RSHIFT,
+            TokenType.EQ,
+            TokenType.NEQ,
+            TokenType.NOT,
+            TokenType.COMMA,
+            TokenType.COLON,
+            TokenType.AT,
+            TokenType.TILDE,
+            TokenType.BITAND,
+            TokenType.BITOR,
+            TokenType.BITXOR,
+            TokenType.DOLLAR,
+            TokenType.AND,
+            TokenType.OR,
         }
         local actuals = map(tokens, attrgetter('type'))
         lu.assertEquals(actuals, types)
@@ -695,26 +695,26 @@ TestTokenizer = {
         local expected = {
             C16 = {
                 W('test', 1, 1),
-                T(COLON, ':', nil, 1, 6),
-                T(FALSE, 'false', false, 1, 8),
-                T(NEWLINE, '\n', nil, 1, 13),
+                T(TokenType.COLON, ':', nil, 1, 6),
+                T(TokenType.FALSE, 'false', false, 1, 8),
+                T(TokenType.NEWLINE, '\n', nil, 1, 13),
                 W('another_test', 2, 1),
-                T(COLON, ':', nil, 2, 13),
-                T(TRUE, 'true', true, 2, 15),
+                T(TokenType.COLON, ':', nil, 2, 13),
+                T(TokenType.TRUE, 'true', true, 2, 15),
             },
             C17 = {
                 W('test', 1, 1),
-                T(COLON, ':', nil, 1, 6),
-                T(NONE, 'null', NIL, 1, 8),
+                T(TokenType.COLON, ':', nil, 1, 6),
+                T(TokenType.NONE, 'null', NIL, 1, 8),
             },
             C25 = {
                 W('unicode', 1, 1),
-                T(ASSIGN, '=', nil, 1, 9),
-                T(STRING, "'Gr\xc3\xbc\xc3\x9f Gott'", 'Gr\xc3\xbc\xc3\x9f Gott', 1, 11),
-                T(NEWLINE, '\n', nil, 1, 22),
+                T(TokenType.ASSIGN, '=', nil, 1, 9),
+                T(TokenType.STRING, "'Gr\xc3\xbc\xc3\x9f Gott'", 'Gr\xc3\xbc\xc3\x9f Gott', 1, 11),
+                T(TokenType.NEWLINE, '\n', nil, 1, 22),
                 W('more_unicode', 2, 1),
-                T(COLON, ':', nil, 2, 13),
-                T(STRING, "'\xc3\x98resund'", '\xc3\x98resund', 2, 15),
+                T(TokenType.COLON, ':', nil, 2, 13),
+                T(TokenType.STRING, "'\xc3\x98resund'", '\xc3\x98resund', 2, 15),
             },
         }
         table.sort(keys)
@@ -750,7 +750,7 @@ TestTokenizer = {
             local t = tokenizer:get_token()
             lu.assertEquals(t.spos, spos)
             lu.assertEquals(t.epos, epos)
-            if t.type == EOF then
+            if t.type == TokenType.EOF then
                 break
             end
         end
@@ -767,16 +767,16 @@ end
 TestParser = {
     test_values = function()
         local cases = {
-            { '1', INTEGER, '1', 1, 1, 1, 1, 1 },
-            { '1.0', FLOAT, '1.0', 1.0, 1, 1, 1, 3 },
-            { '2j', COMPLEX, '2j', complex.to({ 0, 2 }), 1, 1, 1, 2 },
-            { 'true', TRUE, 'true', true, 1, 1, 1, 4 },
-            { 'false', FALSE, 'false', false, 1, 1, 1, 5 },
-            { 'null', NONE, 'null', NIL, 1, 1, 1, 4 },
-            { 'foo', WORD, 'foo', nil, 1, 1, 1, 3 },
-            { '`foo`', BACKTICK, '`foo`', 'foo', 1, 1, 1, 5 },
-            { "'foo'", STRING, "'foo'", 'foo', 1, 1, 1, 5 },
-            { '\'abc\'"def"', STRING, '\'abc\'"def"', 'abcdef', 1, 1, 1, 10 },
+            { '1', TokenType.INTEGER, '1', 1, 1, 1, 1, 1 },
+            { '1.0', TokenType.FLOAT, '1.0', 1.0, 1, 1, 1, 3 },
+            { '2j', TokenType.COMPLEX, '2j', complex.to({ 0, 2 }), 1, 1, 1, 2 },
+            { 'true', TokenType.TRUE, 'true', true, 1, 1, 1, 4 },
+            { 'false', TokenType.FALSE, 'false', false, 1, 1, 1, 5 },
+            { 'null', TokenType.NONE, 'null', NIL, 1, 1, 1, 4 },
+            { 'foo', TokenType.WORD, 'foo', nil, 1, 1, 1, 3 },
+            { '`foo`', TokenType.BACKTICK, '`foo`', 'foo', 1, 1, 1, 5 },
+            { "'foo'", TokenType.STRING, "'foo'", 'foo', 1, 1, 1, 5 },
+            { '\'abc\'"def"', TokenType.STRING, '\'abc\'"def"', 'abcdef', 1, 1, 1, 10 },
         }
 
         for _, case in ipairs(cases) do
@@ -855,13 +855,13 @@ TestParser = {
     test_primaries = function()
         local cases = {
             { 'a', W('a', 1, 1) },
-            { 'a.b', BN(DOT, W('a', 1, 1), W('b', 1, 3)) },
-            { 'a[0]', BN(LBRACK, W('a', 1, 1), N('0', 1, 3)) },
-            { 'a[:2]', BN(COLON, W('a', 1, 1), U(SN(nil, N('2', 1, 4), nil), 1, 2)) },
-            { 'a[::2]', BN(COLON, W('a', 1, 1), U(SN(nil, nil, N('2', 1, 5)), 1, 2)) },
-            { 'a[1:10:2]', BN(COLON, W('a', 1, 1), U(SN(N('1', 1, 3), N('10', 1, 5), N('2', 1, 8)), 1, 2)) },
-            { 'a[2:]', BN(COLON, W('a', 1, 1), U(SN(N('2', 1, 3), nil, nil), 1, 2)) },
-            { 'a[:-1:-1]', BN(COLON, W('a', 1, 1), U(SN(nil, N('-1', 1, 4), N('-1', 1, 7)), 1, 2)) },
+            { 'a.b', BN(TokenType.DOT, W('a', 1, 1), W('b', 1, 3)) },
+            { 'a[0]', BN(TokenType.LBRACK, W('a', 1, 1), N('0', 1, 3)) },
+            { 'a[:2]', BN(TokenType.COLON, W('a', 1, 1), U(SN(nil, N('2', 1, 4), nil), 1, 2)) },
+            { 'a[::2]', BN(TokenType.COLON, W('a', 1, 1), U(SN(nil, nil, N('2', 1, 5)), 1, 2)) },
+            { 'a[1:10:2]', BN(TokenType.COLON, W('a', 1, 1), U(SN(N('1', 1, 3), N('10', 1, 5), N('2', 1, 8)), 1, 2)) },
+            { 'a[2:]', BN(TokenType.COLON, W('a', 1, 1), U(SN(N('2', 1, 3), nil, nil), 1, 2)) },
+            { 'a[:-1:-1]', BN(TokenType.COLON, W('a', 1, 1), U(SN(nil, N('-1', 1, 4), N('-1', 1, 7)), 1, 2)) },
         }
 
         for _, case in ipairs(cases) do
@@ -894,14 +894,25 @@ TestParser = {
     test_unaries = function()
         local cases = {
             { 'a', W('a', 1, 1) },
-            { '-a', U(UN(MINUS, W('a', 1, 2)), 1, 1) },
-            { '+a', U(UN(PLUS, W('a', 1, 2)), 1, 1) },
-            { '@a', U(UN(AT, W('a', 1, 2)), 1, 1) },
-            { '--a', U(UN(MINUS, U(UN(MINUS, W('a', 1, 3)), 1, 2)), 1, 1) },
-            { '-a**b', U(UN(MINUS, U(BN(POWER, W('a', 1, 2), W('b', 1, 5)), 1, 2)), 1, 1) },
+            { '-a', U(UN(TokenType.MINUS, W('a', 1, 2)), 1, 1) },
+            { '+a', U(UN(TokenType.PLUS, W('a', 1, 2)), 1, 1) },
+            { '@a', U(UN(TokenType.AT, W('a', 1, 2)), 1, 1) },
+            { '--a', U(UN(TokenType.MINUS, U(UN(TokenType.MINUS, W('a', 1, 3)), 1, 2)), 1, 1) },
+            { '-a**b', U(UN(TokenType.MINUS, U(BN(TokenType.POWER, W('a', 1, 2), W('b', 1, 5)), 1, 2)), 1, 1) },
             {
                 '-a**b**c',
-                U(UN(MINUS, U(BN(POWER, W('a', 1, 2), U(BN(POWER, W('b', 1, 5), W('c', 1, 8)), 1, 5)), 1, 2)), 1, 1),
+                U(
+                    UN(
+                        TokenType.MINUS,
+                        U(
+                            BN(TokenType.POWER, W('a', 1, 2), U(BN(TokenType.POWER, W('b', 1, 5), W('c', 1, 8)), 1, 5)),
+                            1,
+                            2
+                        )
+                    ),
+                    1,
+                    1
+                ),
             },
         }
 
@@ -916,84 +927,96 @@ TestParser = {
 
     test_expressions = function()
         local cases = {
-            { 'a * b - c', BN(MINUS, BN(STAR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'not a', UN(NOT, W('a', 1, 5)) },
-            { 'not not a', UN(NOT, UN(NOT, W('a', 1, 9))) },
-            { 'a and b or not c', BN(OR, BN(AND, W('a', 1, 1), W('b', 1, 7)), UN(NOT, W('c', 1, 16))) },
+            { 'a * b - c', BN(TokenType.MINUS, BN(TokenType.STAR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'not a', UN(TokenType.NOT, W('a', 1, 5)) },
+            { 'not not a', UN(TokenType.NOT, UN(TokenType.NOT, W('a', 1, 9))) },
+            {
+                'a and b or not c',
+                BN(TokenType.OR, BN(TokenType.AND, W('a', 1, 1), W('b', 1, 7)), UN(TokenType.NOT, W('c', 1, 16))),
+            },
             {
                 '(a + b) - (c + d) * (e + f)',
                 BN(
-                    MINUS,
-                    U(BN(PLUS, W('a', 1, 2), W('b', 1, 6)), 1, 1),
+                    TokenType.MINUS,
+                    U(BN(TokenType.PLUS, W('a', 1, 2), W('b', 1, 6)), 1, 1),
                     BN(
-                        STAR,
-                        U(BN(PLUS, W('c', 1, 12), W('d', 1, 16)), 1, 11),
-                        U(BN(PLUS, W('e', 1, 22), W('f', 1, 26)), 1, 21)
+                        TokenType.STAR,
+                        U(BN(TokenType.PLUS, W('c', 1, 12), W('d', 1, 16)), 1, 11),
+                        U(BN(TokenType.PLUS, W('e', 1, 22), W('f', 1, 26)), 1, 21)
                     )
                 ),
             },
-            { 'a + 4', BN(PLUS, W('a', 1, 1), N('4', 1, 5)) },
+            { 'a + 4', BN(TokenType.PLUS, W('a', 1, 1), N('4', 1, 5)) },
             { 'foo', W('foo', 1, 1) },
             { '0.5', F('0.5', 1, 1) },
             { "'foo''bar'", S("'foo''bar'", 'foobar', 1, 1) },
-            { 'a.b', U(BN(DOT, W('a', 1, 1), W('b', 1, 3)), 1, 1) },
+            { 'a.b', U(BN(TokenType.DOT, W('a', 1, 1), W('b', 1, 3)), 1, 1) },
 
             -- unaries
 
-            { '+bar', U(UN(PLUS, W('bar', 1, 2)), 1, 1) },
-            { '-bar', U(UN(MINUS, W('bar', 1, 2)), 1, 1) },
-            { '~bar', U(UN(BITWISECOMPLEMENT, W('bar', 1, 2)), 1, 1) },
-            { '@bar', U(UN(AT, W('bar', 1, 2)), 1, 1) },
-            { '!bar', UN(NOT, W('bar', 1, 2)) },
-            { 'not bar', UN(NOT, W('bar', 1, 5)) },
+            { '+bar', U(UN(TokenType.PLUS, W('bar', 1, 2)), 1, 1) },
+            { '-bar', U(UN(TokenType.MINUS, W('bar', 1, 2)), 1, 1) },
+            { '~bar', U(UN(TokenType.BITWISECOMPLEMENT, W('bar', 1, 2)), 1, 1) },
+            { '@bar', U(UN(TokenType.AT, W('bar', 1, 2)), 1, 1) },
+            { '!bar', UN(TokenType.NOT, W('bar', 1, 2)) },
+            { 'not bar', UN(TokenType.NOT, W('bar', 1, 5)) },
 
             -- binaries
 
-            { 'a + b', BN(PLUS, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a - b', BN(MINUS, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a * b', BN(STAR, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a / b', BN(SLASH, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a // b', BN(SLASHSLASH, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a ** b', U(BN(POWER, W('a', 1, 1), W('b', 1, 6)), 1, 1) },
-            { 'a << b', BN(LSHIFT, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a >> b', BN(RSHIFT, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a % b', BN(MODULO, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a < b', BN(LT, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a <= b', BN(LE, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a > b', BN(GT, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a >= b', BN(GE, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a == b', BN(EQ, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a != b', BN(NEQ, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a <> b', BN(ALT_NEQ, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a is b', BN(IS, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a in b', BN(IN, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a is not b', BN(ISNOT, W('a', 1, 1), W('b', 1, 10)) },
-            { 'a not in b', BN(NOTIN, W('a', 1, 1), W('b', 1, 10)) },
-            { 'a and b', BN(AND, W('a', 1, 1), W('b', 1, 7)) },
-            { 'a && b', BN(AND, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a or b', BN(OR, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a + b', BN(TokenType.PLUS, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a - b', BN(TokenType.MINUS, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a * b', BN(TokenType.STAR, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a / b', BN(TokenType.SLASH, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a // b', BN(TokenType.SLASHSLASH, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a ** b', U(BN(TokenType.POWER, W('a', 1, 1), W('b', 1, 6)), 1, 1) },
+            { 'a << b', BN(TokenType.LSHIFT, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a >> b', BN(TokenType.RSHIFT, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a % b', BN(TokenType.MODULO, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a < b', BN(TokenType.LT, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a <= b', BN(TokenType.LE, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a > b', BN(TokenType.GT, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a >= b', BN(TokenType.GE, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a == b', BN(TokenType.EQ, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a != b', BN(TokenType.NEQ, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a <> b', BN(TokenType.ALT_NEQ, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a is b', BN(TokenType.IS, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a in b', BN(TokenType.IN, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a is not b', BN(TokenType.ISNOT, W('a', 1, 1), W('b', 1, 10)) },
+            { 'a not in b', BN(TokenType.NOTIN, W('a', 1, 1), W('b', 1, 10)) },
+            { 'a and b', BN(TokenType.AND, W('a', 1, 1), W('b', 1, 7)) },
+            { 'a && b', BN(TokenType.AND, W('a', 1, 1), W('b', 1, 6)) },
+            { 'a or b', BN(TokenType.OR, W('a', 1, 1), W('b', 1, 6)) },
             { 'a || b', BN(OR, W('a', 1, 1), W('b', 1, 6)) },
-            { 'a & b', BN(BITAND, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a | b', BN(BITOR, W('a', 1, 1), W('b', 1, 5)) },
-            { 'a ^ b', BN(BITXOR, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a & b', BN(TokenType.BITAND, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a | b', BN(TokenType.BITOR, W('a', 1, 1), W('b', 1, 5)) },
+            { 'a ^ b', BN(TokenType.BITXOR, W('a', 1, 1), W('b', 1, 5)) },
 
             -- other
 
-            { 'a + b + c', BN(PLUS, BN(PLUS, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a - b - c', BN(MINUS, BN(MINUS, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a * b * c', BN(STAR, BN(STAR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a / b / c', BN(SLASH, BN(SLASH, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a % b % c', BN(MODULO, BN(MODULO, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a & b & c', BN(BITAND, BN(BITAND, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a | b | c', BN(BITOR, BN(BITOR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a ^ b ^ c', BN(BITXOR, BN(BITXOR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
-            { 'a // b // c', BN(SLASHSLASH, BN(SLASHSLASH, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)) },
-            { 'a << b << c', BN(LSHIFT, BN(LSHIFT, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)) },
-            { 'a >> b >> c', BN(RSHIFT, BN(RSHIFT, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)) },
-            { 'a and b and c', BN(AND, BN(AND, W('a', 1, 1), W('b', 1, 7)), W('c', 1, 13)) },
-            { 'a or b or c', BN(OR, BN(OR, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)) },
-            { 'a ** b ** c', U(BN(POWER, W('a', 1, 1), U(BN(POWER, W('b', 1, 6), W('c', 1, 11)), 1, 6)), 1, 1) },
-            { 'a**b**c', U(BN(POWER, W('a', 1, 1), U(BN(POWER, W('b', 1, 4), W('c', 1, 7)), 1, 4)), 1, 1) },
+            { 'a + b + c', BN(TokenType.PLUS, BN(TokenType.PLUS, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'a - b - c', BN(TokenType.MINUS, BN(TokenType.MINUS, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'a * b * c', BN(TokenType.STAR, BN(TokenType.STAR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'a / b / c', BN(TokenType.SLASH, BN(TokenType.SLASH, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'a % b % c', BN(TokenType.MODULO, BN(TokenType.MODULO, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'a & b & c', BN(TokenType.BITAND, BN(TokenType.BITAND, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'a | b | c', BN(TokenType.BITOR, BN(TokenType.BITOR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            { 'a ^ b ^ c', BN(TokenType.BITXOR, BN(TokenType.BITXOR, W('a', 1, 1), W('b', 1, 5)), W('c', 1, 9)) },
+            {
+                'a // b // c',
+                BN(TokenType.SLASHSLASH, BN(TokenType.SLASHSLASH, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)),
+            },
+            { 'a << b << c', BN(TokenType.LSHIFT, BN(TokenType.LSHIFT, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)) },
+            { 'a >> b >> c', BN(TokenType.RSHIFT, BN(TokenType.RSHIFT, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)) },
+            { 'a and b and c', BN(TokenType.AND, BN(TokenType.AND, W('a', 1, 1), W('b', 1, 7)), W('c', 1, 13)) },
+            { 'a or b or c', BN(TokenType.OR, BN(TokenType.OR, W('a', 1, 1), W('b', 1, 6)), W('c', 1, 11)) },
+            {
+                'a ** b ** c',
+                U(BN(TokenType.POWER, W('a', 1, 1), U(BN(TokenType.POWER, W('b', 1, 6), W('c', 1, 11)), 1, 6)), 1, 1),
+            },
+            {
+                'a**b**c',
+                U(BN(TokenType.POWER, W('a', 1, 1), U(BN(TokenType.POWER, W('b', 1, 4), W('c', 1, 7)), 1, 4)), 1, 1),
+            },
         }
 
         for _, case in ipairs(cases) do
@@ -1045,7 +1068,7 @@ TestParser = {
 
         for _, me in ipairs(mn.elements) do
             local t = me.key
-            local v = t.type == WORD and t.text or t.value
+            local v = t.type == TokenType.WORD and t.text or t.value
             table.insert(actual, v)
         end
         lu.assertEquals(actual, expected)
@@ -1090,10 +1113,10 @@ TestParser = {
             lu.assertTrue(instance_of(n, BinaryNode))
             lu.assertEquals(n.lhs, W('foo', 1, 1))
             if c == 'foo[start]' then
-                lu.assertEquals(n.op, LBRACK)
+                lu.assertEquals(n.op, TokenType.LBRACK)
                 lu.assertEquals(n.rhs, W('start', 1, 5))
             else
-                lu.assertEquals(n.op, COLON)
+                lu.assertEquals(n.op, TokenType.COLON)
                 lu.assertEquals(n.rhs, rn)
             end
         end
@@ -1451,7 +1474,7 @@ TestConfig = {
         lu.assertEquals(err.pos.line, 4)
         lu.assertEquals(err.pos.column, 1)
         lu.assertEquals(err.message, 'Duplicate key foo seen at (4, 1) (previously at (1, 1))')
-        cfg = Config:new()
+        local cfg = Config:new()
         cfg.no_duplicates = false
         ok, err = pcall(function()
             cfg:load_file(p)

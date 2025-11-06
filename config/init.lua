@@ -13,6 +13,13 @@ local path = require('config.path')
 -- local log = require('log')
 -- local dbg = require('debugger')
 
+local NIL = {
+    __tostring = function()
+        return 'NIL'
+    end,
+}
+setmetatable(NIL, NIL)
+
 local function get_type(obj)
     local result = type(obj)
 
@@ -235,12 +242,6 @@ end
 
 local TokenType = make_tokentypes()
 
--- Add the token types to the globals so that we don't need to qualify them
--- in this file. We remove them at the end
-for k, v in pairs(TokenType) do
-    _G[k] = v
-end
-
 local function str_repr(s)
     return s:gsub('[\x00-\x7F]', function(c)
         if c == '\n' then
@@ -431,56 +432,51 @@ local os_sep = package.config:sub(1, 1)
 local function dir_name(str)
     local result = str:match('(.*' .. os_sep .. ')')
 
-    if result ~= os_sep then
+    if result == nil then
+        result = path.current_dir()
+    elseif result ~= os_sep then
         result = string.sub(result, 1, #result - 1)
     end
     return result
 end
 
 local PUNCTUATION = {
-    [':'] = COLON,
-    ['-'] = MINUS,
-    ['+'] = PLUS,
-    ['*'] = STAR,
-    ['/'] = SLASH,
-    ['%'] = MODULO,
-    [','] = COMMA,
-    ['{'] = LCURLY,
-    ['}'] = RCURLY,
-    ['['] = LBRACK,
-    [']'] = RBRACK,
-    ['('] = LPAREN,
-    [')'] = RPAREN,
-    ['@'] = AT,
-    ['$'] = DOLLAR,
-    ['<'] = LT,
-    ['>'] = GT,
-    ['!'] = NOT,
-    ['~'] = TILDE,
-    ['&'] = BITAND,
-    ['|'] = BITOR,
-    ['^'] = BITXOR,
-    ['.'] = DOT,
-    ['='] = ASSIGN,
+    [':'] = TokenType.COLON,
+    ['-'] = TokenType.MINUS,
+    ['+'] = TokenType.PLUS,
+    ['*'] = TokenType.STAR,
+    ['/'] = TokenType.SLASH,
+    ['%'] = TokenType.MODULO,
+    [','] = TokenType.COMMA,
+    ['{'] = TokenType.LCURLY,
+    ['}'] = TokenType.RCURLY,
+    ['['] = TokenType.LBRACK,
+    [']'] = TokenType.RBRACK,
+    ['('] = TokenType.LPAREN,
+    [')'] = TokenType.RPAREN,
+    ['@'] = TokenType.AT,
+    ['$'] = TokenType.DOLLAR,
+    ['<'] = TokenType.LT,
+    ['>'] = TokenType.GT,
+    ['!'] = TokenType.NOT,
+    ['~'] = TokenType.TILDE,
+    ['&'] = TokenType.BITAND,
+    ['|'] = TokenType.BITOR,
+    ['^'] = TokenType.BITXOR,
+    ['.'] = TokenType.DOT,
+    ['='] = TokenType.ASSIGN,
 }
 
 local KEYWORDS = {
-    ['true'] = TRUE,
-    ['false'] = FALSE,
-    ['null'] = NONE,
-    ['is'] = IS,
-    ['in'] = IN,
-    ['not'] = NOT,
-    ['and'] = AND,
-    ['or'] = OR,
+    ['true'] = TokenType.TRUE,
+    ['false'] = TokenType.FALSE,
+    ['null'] = TokenType.NONE,
+    ['is'] = TokenType.IS,
+    ['in'] = TokenType.IN,
+    ['not'] = TokenType.NOT,
+    ['and'] = TokenType.AND,
+    ['or'] = TokenType.OR,
 }
-
-local NIL = {
-    __tostring = function()
-        return 'NIL'
-    end,
-}
-setmetatable(NIL, NIL)
 
 local KEYWORD_VALUES = {
     ['true'] = true,
@@ -618,7 +614,7 @@ local Tokenizer = {
     end,
 
     get_number = function(self, token, start_loc, end_loc)
-        local type = INTEGER
+        local tokype = TokenType.INTEGER
         local value
         local in_exponent = false
         local radix = 0
@@ -703,7 +699,7 @@ local Tokenizer = {
         if (radix == 0) and ((c == 'j') or (c == 'J')) then
             table.insert(token, c)
             end_loc:update(self.char_location)
-            type = COMPLEX
+            tokype = TokenType.COMPLEX
         else
             -- not allowed to have a letter or digit which wasn't accepted
             if c and (c ~= '.') and not is_letter_or_digit(c) then
@@ -719,11 +715,11 @@ local Tokenizer = {
         s = s:gsub('[_]', '')
         if radix ~= 0 then
             value = tonumber(s:sub(3), radix)
-        elseif type == COMPLEX then
+        elseif tokype == TokenType.COMPLEX then
             local imag = tonumber(s:sub(1, #s - 1))
             value = complex.to({ 0, imag })
         elseif in_exponent or dot_seen then
-            type = FLOAT
+            tokype = TokenType.FLOAT
             value = tonumber(s)
         else
             if token[1] == '0' then
@@ -734,11 +730,11 @@ local Tokenizer = {
             -- TODO bad octal constant
             value = tonumber(s, radix)
         end
-        return type, value
+        return tokype, value
     end,
 
     get_token = function(self)
-        local type = EOF
+        local toktype = TokenType.EOF
         local token = {}
         local text
         local value
@@ -799,7 +795,7 @@ local Tokenizer = {
                         break
                     end
                 end
-                type = NEWLINE
+                toktype = TokenType.NEWLINE
                 if not nl_seen then
                     self.location:next_line()
                 end
@@ -810,7 +806,7 @@ local Tokenizer = {
                 table.insert(token, c)
                 end_loc:update(self.location)
                 end_loc:prev_column()
-                type = NEWLINE
+                toktype = TokenType.NEWLINE
                 break
             elseif c == '\r' then
                 c = self:get_char()
@@ -820,7 +816,7 @@ local Tokenizer = {
                     table.insert(token, c)
                     end_loc:update(self.location)
                     end_loc:prev_column()
-                    type = NEWLINE
+                    toktype = TokenType.NEWLINE
                     break
                 end
             elseif is_whitespace(c) then
@@ -838,7 +834,7 @@ local Tokenizer = {
                 end
                 end_loc:update(self.char_location)
             elseif is_letter(c) or (c == '_') then
-                type = WORD
+                toktype = TokenType.WORD
                 table.insert(token, c)
                 end_loc:update(self.char_location)
                 c = self:get_char()
@@ -850,12 +846,12 @@ local Tokenizer = {
                 self:push_back(c)
                 text = table.concat(token, '')
                 if KEYWORDS[text] then
-                    type = KEYWORDS[text]
+                    toktype = KEYWORDS[text]
                     value = KEYWORD_VALUES[text]
                 end
                 break
             elseif c == '`' then
-                type = BACKTICK
+                toktype = TokenType.BACKTICK
                 table.insert(token, c)
                 end_loc:update(self.char_location)
                 while true do
@@ -884,7 +880,7 @@ local Tokenizer = {
                 local multi_line = false
                 local escaped = false
                 local n
-                type = STRING
+                toktype = TokenType.STRING
                 table.insert(token, c)
                 local c1 = self:get_char()
                 local c1_loc = self.char_location:copy()
@@ -935,10 +931,10 @@ local Tokenizer = {
             elseif is_digit(c) then
                 table.insert(token, c)
                 end_loc:update(self.char_location)
-                type, value = self:get_number(token, start_loc, end_loc)
+                toktype, value = self:get_number(token, start_loc, end_loc)
                 break
             elseif PUNCTUATION[c] then
-                type = PUNCTUATION[c]
+                toktype = PUNCTUATION[c]
                 table.insert(token, c)
                 end_loc:update(self.char_location)
                 if c == '.' then
@@ -948,14 +944,14 @@ local Tokenizer = {
                     else
                         table.insert(token, c)
                         end_loc:update(self.char_location)
-                        type, value = self:get_number(token, start_loc, end_loc)
+                        toktype, value = self:get_number(token, start_loc, end_loc)
                     end
                 elseif c == '=' then
                     c = self:get_char()
                     if c ~= '=' then
                         self:push_back(c)
                     else
-                        type = EQ
+                        toktype = TokenType.EQ
                         table.insert(token, c)
                         end_loc:update(self.char_location)
                     end
@@ -966,17 +962,17 @@ local Tokenizer = {
                     else
                         table.insert(token, c)
                         end_loc:update(self.char_location)
-                        type, value = self:get_number(token, start_loc, end_loc)
+                        toktype, value = self:get_number(token, start_loc, end_loc)
                     end
                 elseif c == '<' then
                     local update = true
                     c = self:get_char()
                     if c == '=' then
-                        type = LE
+                        toktype = TokenType.LE
                     elseif c == '>' then
-                        type = ALT_NEQ
+                        toktype = TokenType.ALT_NEQ
                     elseif c == '<' then
-                        type = LSHIFT
+                        toktype = TokenType.LSHIFT
                     else
                         update = false
                         self:push_back(c)
@@ -989,9 +985,9 @@ local Tokenizer = {
                     local update = true
                     c = self:get_char()
                     if c == '=' then
-                        type = GE
+                        toktype = TokenType.GE
                     elseif c == '>' then
-                        type = RSHIFT
+                        toktype = TokenType.RSHIFT
                     else
                         update = false
                         self:push_back(c)
@@ -1005,7 +1001,7 @@ local Tokenizer = {
                     if c ~= '=' then
                         self:push_back(c)
                     else
-                        type = NEQ
+                        toktype = TokenType.NEQ
                         table.insert(token, c)
                         end_loc:update(self.char_location)
                     end
@@ -1014,7 +1010,7 @@ local Tokenizer = {
                     if c ~= '/' then
                         self:push_back(c)
                     else
-                        type = SLASHSLASH
+                        toktype = TokenType.SLASHSLASH
                         table.insert(token, c)
                         end_loc:update(self.char_location)
                     end
@@ -1023,7 +1019,7 @@ local Tokenizer = {
                     if c ~= '*' then
                         self:push_back(c)
                     else
-                        type = POWER
+                        toktype = TokenType.POWER
                         table.insert(token, c)
                         end_loc:update(self.char_location)
                     end
@@ -1033,9 +1029,9 @@ local Tokenizer = {
                         self:push_back(c2)
                     else
                         if c2 == '&' then
-                            type = AND
+                            toktype = TokenType.AND
                         else
-                            type = OR
+                            toktype = TokenType.OR
                         end
                         table.insert(token, c)
                         end_loc:update(self.char_location)
@@ -1053,7 +1049,7 @@ local Tokenizer = {
         if text == nil then
             text = table.concat(token, '')
         end
-        local result = Token:new(type, text, value)
+        local result = Token:new(toktype, text, value)
         result.spos = start_loc
         result.epos = end_loc
         return result
@@ -1071,28 +1067,49 @@ local function make_set(...)
     return result
 end
 
-local VALUE_STARTERS = make_set(WORD, INTEGER, FLOAT, COMPLEX, STRING, BACKTICK, NONE, TRUE, FALSE)
-local EXPRESSION_STARTERS = make_set(
-    LCURLY,
-    LBRACK,
-    LPAREN,
-    AT,
-    DOLLAR,
-    BACKTICK,
-    PLUS,
-    MINUS,
-    TILDE,
-    INTEGER,
-    FLOAT,
-    COMPLEX,
-    TRUE,
-    FALSE,
-    NONE,
-    NOT,
-    STRING,
-    WORD
+local VALUE_STARTERS = make_set(
+    TokenType.WORD,
+    TokenType.INTEGER,
+    TokenType.FLOAT,
+    TokenType.COMPLEX,
+    TokenType.STRING,
+    TokenType.BACKTICK,
+    TokenType.NONE,
+    TokenType.TRUE,
+    TokenType.FALSE
 )
-local COMPARISON_OPERATORS = make_set(LT, LE, GT, GE, EQ, NEQ, ALT_NEQ, IS, IN, NOT)
+local EXPRESSION_STARTERS = make_set(
+    TokenType.LCURLY,
+    TokenType.LBRACK,
+    TokenType.LPAREN,
+    TokenType.AT,
+    TokenType.DOLLAR,
+    TokenType.BACKTICK,
+    TokenType.PLUS,
+    TokenType.MINUS,
+    TokenType.TILDE,
+    TokenType.INTEGER,
+    TokenType.FLOAT,
+    TokenType.COMPLEX,
+    TokenType.TRUE,
+    TokenType.FALSE,
+    TokenType.NONE,
+    TokenType.NOT,
+    TokenType.STRING,
+    TokenType.WORD
+)
+local COMPARISON_OPERATORS = make_set(
+    TokenType.LT,
+    TokenType.LE,
+    TokenType.GT,
+    TokenType.GE,
+    TokenType.EQ,
+    TokenType.NEQ,
+    TokenType.ALT_NEQ,
+    TokenType.IS,
+    TokenType.IN,
+    TokenType.NOT
+)
 -- local SCALAR_TOKENS = make_set(STRING, INTEGER, FLOAT, COMPLEX, TRUE, FALSE, NONE)
 
 local ParserError = LexerError:new()
@@ -1225,7 +1242,7 @@ local Parser = {
     end,
 
     at_end = function(self)
-        return self.next.type == EOF
+        return self.next.type == TokenType.EOF
     end,
 
     advance = function(self)
@@ -1246,7 +1263,7 @@ local Parser = {
 
     consume_newlines = function(self)
         local result = self.next.type
-        while result == NEWLINE do
+        while result == TokenType.NEWLINE do
             result = self:advance()
         end
         return result
@@ -1255,7 +1272,7 @@ local Parser = {
     strings = function(self)
         local result = self.next
 
-        if self:advance() == STRING then
+        if self:advance() == TokenType.STRING then
             local all_text = {}
             local all_value = {}
             local type, epos
@@ -1271,14 +1288,14 @@ local Parser = {
                 v = self.next.value
                 epos = self.next.epos
                 type = self:advance()
-                done = type ~= STRING
+                done = type ~= TokenType.STRING
             end
             -- For the last one
             table.insert(all_text, t)
             table.insert(all_value, v)
             t = table.concat(all_text, '')
             v = table.concat(all_value, '')
-            result = Token:new(STRING, t, v)
+            result = Token:new(TokenType.STRING, t, v)
             result.spos = spos:copy()
             result.epos = epos:copy()
         end
@@ -1293,7 +1310,7 @@ local Parser = {
             local pe = ParserError:new(msg, result.spos)
             error(pe, 2)
         end
-        if result.type == STRING then
+        if result.type == TokenType.STRING then
             result = self:strings()
         else
             self:advance()
@@ -1304,19 +1321,19 @@ local Parser = {
     atom = function(self)
         local result
         local type = self.next.type
-        if type == LCURLY then
+        if type == TokenType.LCURLY then
             result = self:mapping()
-        elseif type == LBRACK then
+        elseif type == TokenType.LBRACK then
             result = self:list()
-        elseif type == DOLLAR then
+        elseif type == TokenType.DOLLAR then
             self:advance()
-            self:expect(LCURLY)
-            result = UnaryNode:new(DOLLAR, self:primary())
-            self:expect(RCURLY)
-        elseif type == LPAREN then
+            self:expect(TokenType.LCURLY)
+            result = UnaryNode:new(TokenType.DOLLAR, self:primary())
+            self:expect(TokenType.RCURLY)
+        elseif type == TokenType.LPAREN then
             self:advance()
             result = self:expr()
-            self:expect(RPAREN)
+            self:expect(TokenType.RPAREN)
         else
             result = self:value()
         end
@@ -1334,9 +1351,9 @@ local Parser = {
             error(pe, 3)
         end
 
-        if op ~= LBRACK then
-            self:expect(DOT)
-            result = self:expect(WORD)
+        if op ~= TokenType.LBRACK then
+            self:expect(TokenType.DOT)
+            result = self:expect(TokenType.WORD)
         else
             local type = self:advance()
             local is_slice = false
@@ -1354,18 +1371,18 @@ local Parser = {
 
             local try_get_step = function()
                 local ttype = self:advance()
-                if ttype ~= RBRACK then
+                if ttype ~= TokenType.RBRACK then
                     step = get_slice_element()
                 end
             end
 
-            if type == COLON then
+            if type == TokenType.COLON then
                 -- it's a slice like [:xyz:abc]
                 is_slice = true
             else
                 local elem = get_slice_element()
                 type = self.next.type
-                if type ~= COLON then
+                if type ~= TokenType.COLON then
                     result = elem
                 else
                     start_index = elem
@@ -1377,20 +1394,20 @@ local Parser = {
                 -- value representing the start. We are pointing at the COLON
                 -- after the start value
                 type = self:advance()
-                if type == COLON then
+                if type == TokenType.COLON then
                     try_get_step()
-                elseif type ~= RBRACK then
+                elseif type ~= TokenType.RBRACK then
                     stop_index = get_slice_element()
                     type = self.next.type
-                    if type == COLON then
+                    if type == TokenType.COLON then
                         try_get_step()
                     end
                 end
-                op = COLON
+                op = TokenType.COLON
                 result = SliceNode(start_index, stop_index, step)
                 result.spos = spos
             end
-            self:expect(RBRACK)
+            self:expect(TokenType.RBRACK)
         end
         return TrailerResult(op, result)
     end,
@@ -1399,7 +1416,7 @@ local Parser = {
         local result = self:atom()
         local type = self.next.type
 
-        while type == DOT or type == LBRACK do
+        while type == TokenType.DOT or type == TokenType.LBRACK do
             local t = self:_trailer()
             result = BinaryNode:new(t.op, result, t.operand)
             type = self.next.type
@@ -1410,7 +1427,7 @@ local Parser = {
     mapping_key = function(self)
         local result
 
-        if self.next.type == STRING then
+        if self.next.type == TokenType.STRING then
             result = self:strings()
         else
             result = self.next
@@ -1422,17 +1439,22 @@ local Parser = {
     mapping_body = function(self)
         local elements = {}
         local type = self:consume_newlines()
-        if type ~= RCURLY and type ~= EOF and type ~= WORD and type ~= STRING then
+        if
+            type ~= TokenType.RCURLY
+            and type ~= TokenType.EOF
+            and type ~= TokenType.WORD
+            and type ~= TokenType.STRING
+        then
             local msg = string.format('Unexpected for key: %s', self.next.text)
             local pe = ParserError:new(msg, self.next.spos)
             error(pe, 2)
         end
         local spos = self.next.spos
-        while type == WORD or type == STRING do
+        while type == TokenType.WORD or type == TokenType.STRING do
             local key = self:mapping_key()
             type = self.next.type
 
-            if type ~= COLON and type ~= ASSIGN then
+            if type ~= TokenType.COLON and type ~= TokenType.ASSIGN then
                 local msg = string.format('Expected key-value separator but got %s', type)
                 local pe = ParserError:new(msg, self.next.spos)
                 error(pe, 2)
@@ -1442,7 +1464,7 @@ local Parser = {
             local me = MappingEntry(key, self:expr())
             table.insert(elements, me)
             type = self.next.type
-            if type == NEWLINE or type == COMMA then
+            if type == TokenType.NEWLINE or type == TokenType.COMMA then
                 self:advance()
                 type = self:consume_newlines()
             end
@@ -1453,9 +1475,9 @@ local Parser = {
     end,
 
     mapping = function(self)
-        self:expect(LCURLY)
+        self:expect(TokenType.LCURLY)
         local result = self:mapping_body()
-        self:expect(RCURLY)
+        self:expect(TokenType.RCURLY)
         return result
     end,
 
@@ -1466,7 +1488,7 @@ local Parser = {
         while EXPRESSION_STARTERS[type] ~= nil do
             table.insert(elements, self:expr())
             type = self.next.type
-            if type ~= NEWLINE and type ~= COMMA then
+            if type ~= TokenType.NEWLINE and type ~= TokenType.COMMA then
                 break
             end
             self:advance()
@@ -1478,9 +1500,9 @@ local Parser = {
     end,
 
     list = function(self)
-        self:expect(LBRACK)
+        self:expect(TokenType.LBRACK)
         local result = self:list_body()
-        self:expect(RBRACK)
+        self:expect(TokenType.RBRACK)
         return result
     end,
 
@@ -1488,15 +1510,17 @@ local Parser = {
         local type = self:consume_newlines()
         local result
 
-        if type == LCURLY then
+        if type == TokenType.LCURLY then
             result = self:mapping()
-        elseif type == LBRACK then
+        elseif type == TokenType.LBRACK then
             result = self:list()
-        elseif type == WORD or type == STRING or type == EOF then
+        elseif type == TokenType.WORD or type == TokenType.STRING or type == TokenType.EOF then
             result = self:mapping_body()
         else
             local msg = string.format('Unexpected for container: %s', type)
-            error(msg, 2)
+            local pe = ParserError:neww(msg, nil)
+
+            error(pe, 2)
         end
         self:consume_newlines()
         return result
@@ -1504,9 +1528,9 @@ local Parser = {
 
     power = function(self)
         local result = self:primary()
-        while self.next.type == POWER do
+        while self.next.type == TokenType.POWER do
             self:advance()
-            result = BinaryNode:new(POWER, result, self:unary_expr())
+            result = BinaryNode:new(TokenType.POWER, result, self:unary_expr())
         end
         return result
     end,
@@ -1516,7 +1540,12 @@ local Parser = {
         local type = self.next.type
         local spos = self.next.spos
 
-        if type ~= PLUS and type ~= MINUS and type ~= BITWISECOMPLEMENT and type ~= AT then
+        if
+            type ~= TokenType.PLUS
+            and type ~= TokenType.MINUS
+            and type ~= TokenType.BITWISECOMPLEMENT
+            and type ~= TokenType.AT
+        then
             result = self:power()
         else
             self:advance()
@@ -1530,7 +1559,12 @@ local Parser = {
         local result = self:unary_expr()
         local type = self.next.type
 
-        while type == STAR or type == SLASH or type == SLASHSLASH or type == MODULO do
+        while
+            type == TokenType.STAR
+            or type == TokenType.SLASH
+            or type == TokenType.SLASHSLASH
+            or type == TokenType.MODULO
+        do
             self:advance()
             result = BinaryNode:new(type, result, self:unary_expr())
             type = self.next.type
@@ -1542,7 +1576,7 @@ local Parser = {
         local result = self:mul_expr()
         local type = self.next.type
 
-        while type == PLUS or type == MINUS do
+        while type == TokenType.PLUS or type == TokenType.MINUS do
             self:advance()
             result = BinaryNode:new(type, result, self:mul_expr())
             type = self.next.type
@@ -1554,7 +1588,7 @@ local Parser = {
         local result = self:add_expr()
         local type = self.next.type
 
-        while type == LSHIFT or type == RSHIFT do
+        while type == TokenType.LSHIFT or type == TokenType.RSHIFT do
             self:advance()
             result = BinaryNode:new(type, result, self:add_expr())
             type = self.next.type
@@ -1566,7 +1600,7 @@ local Parser = {
         local result = self:shift_expr()
         local type = self.next.type
 
-        while type == BITAND do
+        while type == TokenType.BITAND do
             self:advance()
             result = BinaryNode:new(type, result, self:shift_expr())
             type = self.next.type
@@ -1578,7 +1612,7 @@ local Parser = {
         local result = self:bitand_expr()
         local type = self.next.type
 
-        while type == BITXOR do
+        while type == TokenType.BITXOR do
             self:advance()
             result = BinaryNode:new(type, result, self:bitand_expr())
             type = self.next.type
@@ -1590,7 +1624,7 @@ local Parser = {
         local result = self:bitxor_expr()
         local type = self.next.type
 
-        while type == BITOR do
+        while type == TokenType.BITOR do
             self:advance()
             result = BinaryNode:new(type, result, self:bitxor_expr())
             type = self.next.type
@@ -1603,11 +1637,11 @@ local Parser = {
         local should_advance = false
         local nt = self:advance()
 
-        if result == IS and nt == NOT then
-            result = ISNOT
+        if result == TokenType.IS and nt == TokenType.NOT then
+            result = TokenType.ISNOT
             should_advance = true
-        elseif result == NOT and nt == IN then
-            result = NOTIN
+        elseif result == TokenType.NOT and nt == TokenType.IN then
+            result = TokenType.NOTIN
             should_advance = true
         end
         if should_advance then
@@ -1626,27 +1660,27 @@ local Parser = {
     end,
 
     not_expr = function(self)
-        if self.next.type ~= NOT then
+        if self.next.type ~= TokenType.NOT then
             return self:comparison()
         end
         self:advance()
-        return UnaryNode:new(NOT, self:not_expr())
+        return UnaryNode:new(TokenType.NOT, self:not_expr())
     end,
 
     and_expr = function(self)
         local result = self:not_expr()
-        while self.next.type == AND do
+        while self.next.type == TokenType.AND do
             self:advance()
-            result = BinaryNode:new(AND, result, self:not_expr())
+            result = BinaryNode:new(TokenType.AND, result, self:not_expr())
         end
         return result
     end,
 
     expr = function(self)
         local result = self:and_expr()
-        while self.next.type == OR do
+        while self.next.type == TokenType.OR do
             self:advance()
-            result = BinaryNode:new(OR, result, self:and_expr())
+            result = BinaryNode:new(TokenType.OR, result, self:and_expr())
         end
         return result
     end,
@@ -1841,7 +1875,7 @@ local function unpack_path(node)
 
     local function visit(n)
         if instance_of(n, Token) then
-            table.insert(result, { op = DOT, operand = n })
+            table.insert(result, { op = TokenType.DOT, operand = n })
         elseif instance_of(n, UnaryNode) then
             visit(n.operand)
         elseif instance_of(n, BinaryNode) then
@@ -1861,7 +1895,7 @@ local function to_source(node)
     local result
 
     if instance_of(node, Token) then
-        if node.type == WORD or node.type == STRING then
+        if node.type == TokenType.WORD or node.type == TokenType.STRING then
             result = node.text
         else
             result = tostring(node.value)
@@ -1873,11 +1907,11 @@ local function to_source(node)
         for i = 2, #pth do
             local pe = pth[i]
 
-            if pe.op == DOT then
+            if pe.op == TokenType.DOT then
                 parts[i] = string.format('.%s', pe.operand.text)
-            elseif pe.op == LBRACK then
+            elseif pe.op == TokenType.LBRACK then
                 parts[i] = string.format('[%s]', to_source(pe.operand))
-            elseif pe.op == COLON then
+            elseif pe.op == TokenType.COLON then
                 local sn = pe.operand
                 local s
                 local sparts = {}
@@ -2009,7 +2043,7 @@ local Config = {
         local seen = self.no_duplicates and {} or nil
 
         for _, me in ipairs(node.elements) do
-            local k = me.key.type == WORD and me.key.text or me.key.value
+            local k = me.key.type == TokenType.WORD and me.key.text or me.key.value
 
             if not self.no_duplicates then
                 result[k] = me.value
@@ -2077,21 +2111,21 @@ local Config = {
     end,
 
     NODE_EVAL = {
-        [AT] = '_eval_at',
-        [DOLLAR] = '_eval_ref',
-        [PLUS] = '_eval_add',
-        [STAR] = '_eval_mult',
-        [SLASH] = '_eval_divide',
-        [MODULO] = '_eval_modulo',
-        [SLASHSLASH] = '_eval_idivide',
-        [BITOR] = '_eval_bitor',
-        [BITAND] = '_eval_bitand',
-        [BITXOR] = '_eval_bitxor',
-        [LSHIFT] = '_eval_lshift',
-        [RSHIFT] = '_eval_rshift',
-        [AND] = '_eval_logand',
-        [OR] = '_eval_logor',
-        [POWER] = '_eval_power',
+        [TokenType.AT] = '_eval_at',
+        [TokenType.DOLLAR] = '_eval_ref',
+        [TokenType.PLUS] = '_eval_add',
+        [TokenType.STAR] = '_eval_mult',
+        [TokenType.SLASH] = '_eval_divide',
+        [TokenType.MODULO] = '_eval_modulo',
+        [TokenType.SLASHSLASH] = '_eval_idivide',
+        [TokenType.BITOR] = '_eval_bitor',
+        [TokenType.BITAND] = '_eval_bitand',
+        [TokenType.BITXOR] = '_eval_bitxor',
+        [TokenType.LSHIFT] = '_eval_lshift',
+        [TokenType.RSHIFT] = '_eval_rshift',
+        [TokenType.AND] = '_eval_logand',
+        [TokenType.OR] = '_eval_logor',
+        [TokenType.POWER] = '_eval_power',
     },
 
     _eval_ref = function(self, node)
@@ -2547,7 +2581,7 @@ local Config = {
         if tnode == 'string' or tnode == 'number' then
             result = node
         elseif instance_of(node, Token) then
-            if node.type == WORD then
+            if node.type == TokenType.WORD then
                 if not contains_key(self.context, node.text) then
                     local msg = string.format("Unknown variable '%s'", node.text)
                     local ce = ConfigError:new(msg, node.spos)
@@ -2558,7 +2592,7 @@ local Config = {
                     error(ce, 2)
                 end
                 result = self.context[node.text]
-            elseif node.type == BACKTICK then
+            elseif node.type == TokenType.BACKTICK then
                 result = self:_convert_string(node.value, node.spos)
             else
                 result = node.value
@@ -2571,7 +2605,7 @@ local Config = {
             local mt = getmetatable(self)
             local func, k, msg
 
-            if node.op == MINUS then
+            if node.op == TokenType.MINUS then
                 if instance_of(node, UnaryNode) then
                     k = '_eval_negate'
                 else
@@ -2821,10 +2855,10 @@ local Config = {
         for _, pe in ipairs(elements) do
             local loc = pe.operand.spos
 
-            if pe.op == DOT then
+            if pe.op == TokenType.DOT then
                 local t = pe.operand
                 assert(instance_of(t, Token), 'Token expected')
-                assert(t.type == WORD, 'Word expected')
+                assert(t.type == TokenType.WORD, 'Word expected')
                 local k = t.text
                 local d
 
@@ -2837,7 +2871,7 @@ local Config = {
                     not_found(k, loc)
                 end
                 current = d[k]
-            elseif pe.op == LBRACK then
+            elseif pe.op == TokenType.LBRACK then
                 if not is_array(current) then
                     local msg = 'Invalid container for numeric index'
                     local ce = ConfigError:new(msg, loc)
@@ -2863,7 +2897,7 @@ local Config = {
                     error(ce, 2)
                 end
                 current = current[idx + 1] -- Lua has 1-based indices
-            elseif pe.op == COLON then
+            elseif pe.op == TokenType.COLON then
                 if not is_array(current) then
                     local msg = 'Invalid container for slice index'
                     local ce = ConfigError:new(msg, loc)
@@ -2977,11 +3011,6 @@ Config._unwrap = function(self, v)
         result = v
     end
     return result
-end
-
--- Remove the added token types
-for k, _ in pairs(TokenType) do
-    _G[k] = nil
 end
 
 return {
