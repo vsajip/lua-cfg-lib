@@ -50,9 +50,12 @@ The configuration above can be loaded as shown below. In the REPL shell:
 
 Access elements with keys
 =========================
-Accessing elements of the configuration with a simple key uses the `get` method:
+Accessing elements of the configuration with a simple key uses the `get` method, though you can also access
+elements using conventional indexing or attribute syntax:
 
 ```
+> cfg:get('a')
+Hello,
 > cfg.a
 Hello,
 > cfg['a']
