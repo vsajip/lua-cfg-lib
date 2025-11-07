@@ -1,7 +1,8 @@
 package = 'cfg-lib'
 version = '0.1.0-1'
 source = {
-    url = 'https://github.com/vsajip/lua-cfg-lib/'
+    url = 'git://github.com/vsajip/lua-cfg-lib/',
+    tag = 'v0.1.0'
 }
 description = {
     summary = 'A library for working with the CFG configuration format.',
