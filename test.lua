@@ -764,6 +764,8 @@ local function make_parser(s)
     return Parser:new(stream)
 end
 
+local NIL_PLACEHOLDER = { NIL }
+
 TestParser = {
     test_values = function()
         local cases = {
@@ -773,7 +775,7 @@ TestParser = {
             { 'true', TokenType.TRUE, 'true', true, 1, 1, 1, 4 },
             { 'false', TokenType.FALSE, 'false', false, 1, 1, 1, 5 },
             { 'null', TokenType.NONE, 'null', NIL, 1, 1, 1, 4 },
-            { 'foo', TokenType.WORD, 'foo', nil, 1, 1, 1, 3 },
+            { 'foo', TokenType.WORD, 'foo', NIL_PLACEHOLDER, 1, 1, 1, 3 },  -- can't have nil in a table
             { '`foo`', TokenType.BACKTICK, '`foo`', 'foo', 1, 1, 1, 5 },
             { "'foo'", TokenType.STRING, "'foo'", 'foo', 1, 1, 1, 5 },
             { '\'abc\'"def"', TokenType.STRING, '\'abc\'"def"', 'abcdef', 1, 1, 1, 10 },
@@ -783,6 +785,7 @@ TestParser = {
             local c, k, t, v, sl, sc, el, ec = table.unpack(case)
             local parser = make_parser(c)
             local r = parser:value()
+            if v == NIL_PLACEHOLDER then v = nil end
             lu.assertEquals(r.type, k)
             lu.assertEquals(r.text, t)
             lu.assertEquals(r.value, v)
@@ -1102,7 +1105,7 @@ TestParser = {
             { 'foo[::]', U(SN(nil, nil, nil), 1, 4) },
             { 'foo[:]', U(SN(nil, nil, nil), 1, 4) },
             { 'foo[start::step]', U(SN(W('start', 1, 5), nil, W('step', 1, 12)), 1, 4) },
-            { 'foo[start]', nil },
+            { 'foo[start]', NIL_PLACEHOLDER },  -- can't have mil in a table
         }
 
         for _, case in ipairs(cases) do
@@ -1110,6 +1113,7 @@ TestParser = {
             local p = make_parser(c)
             local n = p:expr()
 
+            if rn == NIL_PLACEHOLDER then rn = nil end
             lu.assertTrue(instance_of(n, BinaryNode))
             lu.assertEquals(n.lhs, W('foo', 1, 1))
             if c == 'foo[start]' then
